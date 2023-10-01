@@ -37,7 +37,7 @@ def ppq_legacy(func: str, version: str, adapt_to: str = None):
         version (str): _description_
         adapt_to (str, optional): _description_. Defaults to None.
     """
-    print(f'{func} has been obsoleted since PPQ {version}, use {adapt_to} instead.')
+    print(f"{func} has been obsoleted since PPQ {version}, use {adapt_to} instead.")
 
 
 def empty_ppq_cache(func: Callable):
@@ -48,10 +48,12 @@ def empty_ppq_cache(func: Callable):
     Args:
         func (Callable): decorated function
     """
+
     def _wrapper(*args, **kwargs):
-        empty_cache() # torch.cuda.empty_cache might requires a sync of all cuda device.
+        empty_cache()  # torch.cuda.empty_cache might requires a sync of all cuda device.
         gc.collect()  # empty memory.
         return func(*args, **kwargs)
+
     return _wrapper
 
 
@@ -61,8 +63,10 @@ def ppq_quant_param_computing_function(func: Callable):
     Args:
         func (Callable): decorated function
     """
+
     def _wrapper(*args, **kwargs):
         return func(*args, **kwargs)
+
     return _wrapper
 
 
@@ -72,15 +76,19 @@ def ppq_debug_function(func: Callable):
     Args:
         func (Callable): decorated function
     """
+
     def _wrapper(*args, **kwargs):
         if PPQ_CONFIG.PPQ_DEBUG:
             debug_str = func(*args, **kwargs)
-            if debug_str is None: return None
+            if debug_str is None:
+                return None
             assert isinstance(debug_str, str), (
-                'ppq_debug_function should only return string instance, '
-                f'while {str(func)} returns {type(debug_str)}')
-            print(debug_str, end='')
-        else: return None
+                "ppq_debug_function should only return string instance, "
+                f"while {str(func)} returns {type(debug_str)}"
+            )
+            print(debug_str, end="")
+        else:
+            return None
 
     return _wrapper
 
@@ -92,14 +100,16 @@ def ppq_file_io(func: Callable):
     Args:
         func (Callable): decorated function
     """
+
     def _wrapper(*args, **kwargs):
         return func(*args, **kwargs)
+
     return _wrapper
 
 
 def ppq_warning(info: str):
-    print(f'\033[31m[Warning] {info}\033[0m')
+    print(f"\033[31m[Warning] {info}\033[0m")
 
 
 def ppq_info(info: str):
-    print(f'\033[33m[Info] {info}\033[0m')
+    print(f"\033[33m[Info] {info}\033[0m")

@@ -6,10 +6,14 @@ import torch
 from ppq.core import RoundingPolicy
 from torch.autograd import Function
 
+
 class PPQTensorRoundImpl(Function):
-    @ staticmethod
-    def forward(ctx, value: torch.Tensor, 
-                policy:RoundingPolicy=RoundingPolicy.ROUND_HALF_EVEN) -> torch.Tensor:
+    @staticmethod
+    def forward(
+        ctx,
+        value: torch.Tensor,
+        policy: RoundingPolicy = RoundingPolicy.ROUND_HALF_EVEN,
+    ) -> torch.Tensor:
         """
             reference: https://en.wikipedia.org/wiki/Rounding
 
@@ -23,7 +27,9 @@ class PPQTensorRoundImpl(Function):
         Returns:
             torch.Tensor: [description]
         """
-        assert isinstance(value, torch.Tensor), 'tensor round only takes effect on torch tensor.'
+        assert isinstance(
+            value, torch.Tensor
+        ), "tensor round only takes effect on torch tensor."
         if policy == RoundingPolicy.ROUND_HALF_EVEN:
             # default rounding policy of torch is ROUND_TO_NEAR_EVEN
             # try this: print(torch.Tensor([1.5, 2.5, 3.5, 4.5]).round())
@@ -40,16 +46,20 @@ class PPQTensorRoundImpl(Function):
         elif policy == RoundingPolicy.ROUND_HALF_UP:
             return torch.floor(value + 0.5)
         elif policy == RoundingPolicy.ROUND_TO_NEAR_INT:
-            raise NotImplementedError(f'Torch Tensor can not use this rounding policy({policy}) try ROUND_HALF_EVEN instead.')
+            raise NotImplementedError(
+                f"Torch Tensor can not use this rounding policy({policy}) try ROUND_HALF_EVEN instead."
+            )
         else:
-            raise ValueError('Unexpected rounding policy found.')
+            raise ValueError("Unexpected rounding policy found.")
 
-    @ staticmethod
+    @staticmethod
     def backward(ctx, dy: torch.Tensor):
         return dy, None
 
-def ppq_numerical_round(value: float,
-    policy: RoundingPolicy=RoundingPolicy.ROUND_HALF_EVEN) -> int:
+
+def ppq_numerical_round(
+    value: float, policy: RoundingPolicy = RoundingPolicy.ROUND_HALF_EVEN
+) -> int:
     """
         reference: https://en.wikipedia.org/wiki/Rounding
 
@@ -73,30 +83,43 @@ def ppq_numerical_round(value: float,
     Returns:
         int: [description]
     """
-    assert isinstance(value, float), 'numerical round only takes effect on float number.'
+    assert isinstance(
+        value, float
+    ), "numerical round only takes effect on float number."
     if policy == RoundingPolicy.ROUND_HALF_EVEN:
         return int(Decimal(value).quantize(exp=Decimal(1), rounding=ROUND_HALF_EVEN))
     elif policy == RoundingPolicy.ROUND_HALF_UP:
-        if value > 0: return int(Decimal(value).quantize(exp=Decimal(1), rounding=ROUND_HALF_UP))
-        else: return int(Decimal(value).quantize(exp=Decimal(1), rounding=ROUND_HALF_DOWN))
+        if value > 0:
+            return int(Decimal(value).quantize(exp=Decimal(1), rounding=ROUND_HALF_UP))
+        else:
+            return int(
+                Decimal(value).quantize(exp=Decimal(1), rounding=ROUND_HALF_DOWN)
+            )
     elif policy == RoundingPolicy.ROUND_HALF_DOWN:
-        if value > 0: return int(Decimal(value).quantize(exp=Decimal(1), rounding=ROUND_HALF_DOWN))
-        else: return int(Decimal(value).quantize(exp=Decimal(1), rounding=ROUND_HALF_UP))
+        if value > 0:
+            return int(
+                Decimal(value).quantize(exp=Decimal(1), rounding=ROUND_HALF_DOWN)
+            )
+        else:
+            return int(Decimal(value).quantize(exp=Decimal(1), rounding=ROUND_HALF_UP))
     elif policy == RoundingPolicy.ROUND_HALF_TOWARDS_ZERO:
         return ppq_numerical_round(value, RoundingPolicy.ROUND_HALF_DOWN)
     elif policy == RoundingPolicy.ROUND_HALF_FAR_FORM_ZERO:
         return ppq_numerical_round(value, RoundingPolicy.ROUND_HALF_UP)
     elif policy == RoundingPolicy.ROUND_TO_NEAR_INT:
-        if value > 0: return floor(value + 0.5)
-        else: return ceil(value - 0.5)
+        if value > 0:
+            return floor(value + 0.5)
+        else:
+            return ceil(value - 0.5)
     elif policy == RoundingPolicy.ROUND_UP:
         return ceil(value)
     else:
-        raise ValueError('Unexpected rounding policy found.')
+        raise ValueError("Unexpected rounding policy found.")
+
 
 def ppq_tensor_round(
-    value: torch.Tensor,
-    policy:RoundingPolicy=RoundingPolicy.ROUND_HALF_EVEN) -> torch.Tensor:
+    value: torch.Tensor, policy: RoundingPolicy = RoundingPolicy.ROUND_HALF_EVEN
+) -> torch.Tensor:
     """
         reference: https://en.wikipedia.org/wiki/Rounding
 
@@ -112,8 +135,10 @@ def ppq_tensor_round(
     """
     return PPQTensorRoundImpl.apply(value, policy)
 
-def ppq_round_to_power_of_2(value: Union[float, int],
-    policy: RoundingPolicy=RoundingPolicy.ROUND_UP) -> float:
+
+def ppq_round_to_power_of_2(
+    value: Union[float, int], policy: RoundingPolicy = RoundingPolicy.ROUND_UP
+) -> float:
     """
     Round a given value to Integer, under Power-of-2 restrction.
 
@@ -128,8 +153,10 @@ def ppq_round_to_power_of_2(value: Union[float, int],
     Returns:
         float: _description_
     """
-    if value == 0: return 0
+    if value == 0:
+        return 0
     sign = 1 if value >= 0 else -1
-    assert isinstance(value, float) or isinstance(value, int), \
-        'power-of-2 round only takes effect on float or int.'
+    assert isinstance(value, float) or isinstance(
+        value, int
+    ), "power-of-2 round only takes effect on float or int."
     return sign * float(pow(2, ppq_numerical_round(log2(sign * value), policy=policy)))

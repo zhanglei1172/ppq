@@ -1,9 +1,13 @@
-
 import os
 from typing import List
 
-from ppq.core import (DataType, NetworkFramework, QuantizationProperty,
-                      QuantizationStates, ppq_warning)
+from ppq.core import (
+    DataType,
+    NetworkFramework,
+    QuantizationProperty,
+    QuantizationStates,
+    ppq_warning,
+)
 from ppq.IR import BaseGraph, GraphExporter
 
 from .caffe_exporter import CaffeExporter
@@ -14,20 +18,25 @@ ASCEND_QUANT_OP = {"Conv", "ConvTranspose", "Gemm", "AveragePool"}
 
 FLT_EPSILON = 1.1920929e-7
 
+
 def adapt_scale(op, scale):
     min = FLT_EPSILON
     max = 1.0 / FLT_EPSILON
     if scale < min:
         scale = FLT_EPSILON
-        ppq_warning(f'{op.name} scale is too small: {scale}.')
+        ppq_warning(f"{op.name} scale is too small: {scale}.")
     elif scale > max:
         scale = max
-        ppq_warning(f'{op.name} scale is too large: {scale}.')
+        ppq_warning(f"{op.name} scale is too large: {scale}.")
     return scale
 
+
 def check_offset(offset):
-    if offset>127 or offset < -128:
-        raise RuntimeError(f'This offset value {offset} does not belong to the range [-128,127].')
+    if offset > 127 or offset < -128:
+        raise RuntimeError(
+            f"This offset value {offset} does not belong to the range [-128,127]."
+        )
+
 
 def generate_shape(shape):
     channels = ""
@@ -40,8 +49,9 @@ def generate_shape(shape):
     elif len(shape) == 4:
         _, channels, height, width = shape
     else:
-        raise RuntimeError(f'Please design this shape yourself.')
+        raise RuntimeError(f"Please design this shape yourself.")
     return channels, height, width
+
 
 class AscendExporter(GraphExporter):
     def export_quantization_config(self, config_path: str, graph: BaseGraph):
@@ -50,8 +60,10 @@ class AscendExporter(GraphExporter):
 
         for op in graph.topological_sort():
             if op.type in {"Conv", "ConvTranspose", "Gemm"}:
-                if not hasattr(op, 'config'):
-                    ppq_warning(f'This op does not write quantization parameters: {op.name}.')
+                if not hasattr(op, "config"):
+                    ppq_warning(
+                        f"This op does not write quantization parameters: {op.name}."
+                    )
                     continue
                 op_name = '''\"''' + op.name + '''\"'''
                 quant_unit_list = []
@@ -60,25 +72,33 @@ class AscendExporter(GraphExporter):
                 quant_unit_list.append("  value {\n")
 
                 input_cfg = op.config.input_quantization_config[0]
-                assert input_cfg.state == QuantizationStates.ACTIVATED and\
-                    input_cfg.policy.has_property(QuantizationProperty.PER_TENSOR)
+                assert (
+                    input_cfg.state == QuantizationStates.ACTIVATED
+                    and input_cfg.policy.has_property(QuantizationProperty.PER_TENSOR)
+                )
 
                 scale_d = input_cfg.scale.item()
                 offset_d = int(input_cfg.offset.item()) - 128
 
                 check_offset(offset_d)
-                quant_unit_list.append("    scale_d: " + str(adapt_scale(op, scale_d)) + "\n")
+                quant_unit_list.append(
+                    "    scale_d: " + str(adapt_scale(op, scale_d)) + "\n"
+                )
                 quant_unit_list.append("    offset_d: " + str(offset_d) + "\n")
 
                 weight_config = op.config.input_quantization_config[1]
                 scale_list = convert_value(weight_config.scale, False, DataType.FP32)
 
                 if op.type == "Gemm":
-                    assert isinstance(scale_list,float), 'Gemm can only have one scale.'
+                    assert isinstance(
+                        scale_list, float
+                    ), "Gemm can only have one scale."
                     scale_list = [scale_list]
 
                 for scale_w in scale_list:
-                    quant_unit_list.append("    scale_w: " + str(adapt_scale(op, scale_w)) + "\n")
+                    quant_unit_list.append(
+                        "    scale_w: " + str(adapt_scale(op, scale_w)) + "\n"
+                    )
 
                 for _ in range(len(scale_list)):
                     quant_unit_list.append("    offset_w: " + "0" + "\n")
@@ -92,10 +112,11 @@ class AscendExporter(GraphExporter):
                 quant_unit_list.append("}" + "\n")
                 matched_nodes.append(quant_unit_list)
 
-
             elif op.type == "AveragePool":
-                if not hasattr(op, 'config'):
-                    ppq_warning(f'This op does not write quantization parameters: {op.name}.')
+                if not hasattr(op, "config"):
+                    ppq_warning(
+                        f"This op does not write quantization parameters: {op.name}."
+                    )
                     continue
                 op_name = '''\"''' + op.name + '''\"'''
                 quant_unit_list = []
@@ -103,13 +124,17 @@ class AscendExporter(GraphExporter):
                 quant_unit_list.append("  key: " + op_name + "\n")
                 quant_unit_list.append("  value {\n")
                 input_cfg = op.config.input_quantization_config[0]
-                assert input_cfg.state == QuantizationStates.ACTIVATED and\
-                    input_cfg.policy.has_property(QuantizationProperty.PER_TENSOR)
+                assert (
+                    input_cfg.state == QuantizationStates.ACTIVATED
+                    and input_cfg.policy.has_property(QuantizationProperty.PER_TENSOR)
+                )
                 scale_d = input_cfg.scale.item()
-                
+
                 offset_d = int(input_cfg.offset.item()) - 128
                 check_offset(offset_d)
-                quant_unit_list.append("    scale_d: " + str(adapt_scale(op, scale_d)) + "\n")
+                quant_unit_list.append(
+                    "    scale_d: " + str(adapt_scale(op, scale_d)) + "\n"
+                )
                 quant_unit_list.append("    offset_d: " + str(offset_d) + "\n")
                 _, channels, height, width = op.inputs[0].shape
                 quant_unit_list.append("    channels: " + str(channels) + "\n")
@@ -120,29 +145,45 @@ class AscendExporter(GraphExporter):
                 matched_nodes.append(quant_unit_list)
             else:
                 continue
-        fd = open(new_config_path, 'w+')
+        fd = open(new_config_path, "w+")
         for tem_list in matched_nodes:
             for tem_str in tem_list:
                 fd.write(tem_str)
         fd.close()
 
-    def export(self, file_path: str, graph: BaseGraph, config_path: str = None, input_shapes: List[List[int]] = [[1, 3, 224, 224]]):
+    def export(
+        self,
+        file_path: str,
+        graph: BaseGraph,
+        config_path: str = None,
+        input_shapes: List[List[int]] = [[1, 3, 224, 224]],
+    ):
         if config_path is not None:
             self.export_quantization_config(config_path, graph)
 
         _, ext = os.path.splitext(file_path)
-        if ext == '.onnx':
+        if ext == ".onnx":
             exporter = OnnxExporter()
             exporter.export(file_path=file_path, graph=graph, config_path=None)
-        elif ext in {'.prototxt', '.caffemodel'}:
+        elif ext in {".prototxt", ".caffemodel"}:
             exporter = CaffeExporter()
-            exporter.export(file_path=file_path, graph=graph, config_path=None, input_shapes=input_shapes)
-        
+            exporter.export(
+                file_path=file_path,
+                graph=graph,
+                config_path=None,
+                input_shapes=input_shapes,
+            )
+
         # no pre-determined export format, we export according to the
         # original model format
         elif graph._built_from == NetworkFramework.CAFFE:
             exporter = CaffeExporter()
-            exporter.export(file_path=file_path, graph=graph, config_path=None, input_shapes=input_shapes)
+            exporter.export(
+                file_path=file_path,
+                graph=graph,
+                config_path=None,
+                input_shapes=input_shapes,
+            )
 
         elif graph._built_from == NetworkFramework.ONNX:
             exporter = OnnxExporter()

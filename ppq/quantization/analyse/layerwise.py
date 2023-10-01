@@ -17,12 +17,11 @@ def layerwise_error_analyse(
     dataloader: Iterable,
     interested_outputs: Union[str, List[str]] = None,
     collate_fn: Callable = None,
-    running_device='cuda',
-    method: str = 'snr',
+    running_device="cuda",
+    method: str = "snr",
     steps: int = 8,
     verbose: bool = True,
-    ) -> Dict[str, tuple]:
-
+) -> Dict[str, tuple]:
     """Measure the quantization error of each operation A dictionary contains
     output differences for all operation will be returned as a result.
 
@@ -95,13 +94,16 @@ def layerwise_error_analyse(
             recorders[operation.name] = MeasureRecorder(measurement=method)
 
     # run for each quantable operations:
-    for operation in tqdm(quantable_operations, desc='Analysing Layerwise quantization error:'):
+    for operation in tqdm(
+        quantable_operations, desc="Analysing Layerwise quantization error:"
+    ):
         assert isinstance(operation, QuantableOperation)
         recorder = recorders[operation.name]
         assert isinstance(recorder, MeasureRecorder)
 
         for idx, batch in enumerate(dataloader):
-            if collate_fn is not None: batch = collate_fn(batch)
+            if collate_fn is not None:
+                batch = collate_fn(batch)
             fp_outputs = executor.forward(inputs=batch, output_names=interested_outputs)
 
             # manually override quantization state
@@ -109,11 +111,12 @@ def layerwise_error_analyse(
             qt_outputs = executor.forward(inputs=batch, output_names=interested_outputs)
 
             for fp_output, qt_output in zip(fp_outputs, qt_outputs):
-                recorder.update(y_pred = qt_output, y_real = fp_output)
+                recorder.update(y_pred=qt_output, y_real=fp_output)
 
             # manually override quantization state
             operation.dequantize()
-            if idx >= steps: break
+            if idx >= steps:
+                break
 
     # restore quantization states
     for operation in graph.operations.values():
@@ -126,11 +129,19 @@ def layerwise_error_analyse(
         results[operation.name] = recorders[operation.name].measure
 
     if verbose:
-        method_str = 'MEASUREMENT'
-        if method == 'snr': method_str = 'NOISE:SIGNAL POWER RATIO'
-        if method == 'cosine': method_str = 'COSINE SIMILARITY'
-        if method == 'mse': method_str = 'MSE LOSS(UNSCALED)'
-        MeasurePrinter(results, order='large_to_small', measure=method_str, percentage=method in {'snr', 'cosine'}).print()
+        method_str = "MEASUREMENT"
+        if method == "snr":
+            method_str = "NOISE:SIGNAL POWER RATIO"
+        if method == "cosine":
+            method_str = "COSINE SIMILARITY"
+        if method == "mse":
+            method_str = "MSE LOSS(UNSCALED)"
+        MeasurePrinter(
+            results,
+            order="large_to_small",
+            measure=method_str,
+            percentage=method in {"snr", "cosine"},
+        ).print()
     return results
 
 
@@ -139,25 +150,30 @@ def variable_analyse(
     dataloader: Iterable,
     interested_outputs: Union[str, List[str]],
     collate_fn: Callable = None,
-    running_device = 'cuda',
+    running_device="cuda",
     samples_per_step: int = 65536,
     steps: int = 8,
-    dequantize: bool = False):
-
+    dequantize: bool = False,
+):
     quant_graph = QuantableGraph(graph)
 
     executor = TorchExecutor(graph=graph, device=running_device)
-    if dequantize: quant_graph.dequantize_graph()
+    if dequantize:
+        quant_graph.dequantize_graph()
 
     data_collector = defaultdict(list)
     for idx, batch in enumerate(dataloader):
-        if collate_fn is not None: batch = collate_fn(batch)
+        if collate_fn is not None:
+            batch = collate_fn(batch)
         fp_outputs = executor.forward(inputs=batch, output_names=interested_outputs)
         for output, output_name in zip(fp_outputs, interested_outputs):
             data_collector[output_name].append(
-                tensor_random_fetch(tensor=output, num_of_fetches=samples_per_step).unsqueeze(0)
+                tensor_random_fetch(
+                    tensor=output, num_of_fetches=samples_per_step
+                ).unsqueeze(0)
             )
-        if idx >= steps: break
+        if idx >= steps:
+            break
 
     for name in interested_outputs:
         tensor = torch.cat(data_collector[name]).flatten()
@@ -166,14 +182,15 @@ def variable_analyse(
         try:
             from matplotlib import pyplot as plt
         except ImportError as e:
-            raise Exception('Install matplotlib before using this function.')
+            raise Exception("Install matplotlib before using this function.")
 
         plt.figure(figsize=[12, 8])
-        plt.title(f'Histogram Result of Variable {name}:')
+        plt.title(f"Histogram Result of Variable {name}:")
         plt.hist(tensor, bins=64)
         plt.show()
 
-    if dequantize: quant_graph.restore_quantize_state()
+    if dequantize:
+        quant_graph.restore_quantize_state()
 
 
 def parameter_analyse(graph: BaseGraph):
@@ -181,9 +198,11 @@ def parameter_analyse(graph: BaseGraph):
     for operation in graph.operations.values():
         for var in operation.parameters:
             value = var.value
-            assert isinstance(value, torch.Tensor), (
-                f'Invaild parameter value type, expect torch.Tensor, however {type(value)} was given.')
-            if value.numel() <= 1: continue
+            assert isinstance(
+                value, torch.Tensor
+            ), f"Invaild parameter value type, expect torch.Tensor, however {type(value)} was given."
+            if value.numel() <= 1:
+                continue
 
             _min, _max, _std, _mean = 0, 0, 0, 0
             try:
@@ -191,13 +210,13 @@ def parameter_analyse(graph: BaseGraph):
                 _max = value.max().item()
                 _std = value.std().item()
                 _mean = value.mean().item()
-            except: pass
+            except:
+                pass
 
+            ranges[f"{var.name}[{operation.name}]"] = _max - _min
+            stds[f"{var.name}[{operation.name}]"] = _std
+            means[f"{var.name}[{operation.name}]"] = abs(_mean)
 
-            ranges[f'{var.name}[{operation.name}]'] = _max - _min
-            stds[f'{var.name}[{operation.name}]'] = _std
-            means[f'{var.name}[{operation.name}]'] = abs(_mean)
-
-    MeasurePrinter(ranges, order='large_to_small', measure='Value Range').print()
-    MeasurePrinter(stds, order='large_to_small', measure='Value Std').print()
-    MeasurePrinter(means, order='large_to_small', measure='Value Mean(Abs)').print()
+    MeasurePrinter(ranges, order="large_to_small", measure="Value Range").print()
+    MeasurePrinter(stds, order="large_to_small", measure="Value Std").print()
+    MeasurePrinter(means, order="large_to_small", measure="Value Mean(Abs)").print()

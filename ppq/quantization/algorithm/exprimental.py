@@ -22,8 +22,10 @@ class BanditDelegator(TorchQuantizeDelegator):
     Multi-arm bandits are introduced since PPQ 0.6.2 for training
         quantization scale and offset.
     """
-    def __init__(self,  arms: List[float], config: TensorQuantizationConfig) -> None:
-        if len(arms) < 2: raise ValueError('Can not initialize bandit with less than 2 arms.')
+
+    def __init__(self, arms: List[float], config: TensorQuantizationConfig) -> None:
+        if len(arms) < 2:
+            raise ValueError("Can not initialize bandit with less than 2 arms.")
         self.e = 0.1
         self.arms = arms
         self.num_of_arms = len(arms)
@@ -35,8 +37,10 @@ class BanditDelegator(TorchQuantizeDelegator):
         self.decay = 0.99
 
     def roll(self) -> int:
-        if random.random() > self.e: selected = random.randint(0, len(self.arms) - 1)
-        else: selected = np.argmax([ema.pop() for ema in self.rewards])
+        if random.random() > self.e:
+            selected = random.randint(0, len(self.arms) - 1)
+        else:
+            selected = np.argmax([ema.pop() for ema in self.rewards])
         self.last_selected = selected
         return selected
 
@@ -44,12 +48,15 @@ class BanditDelegator(TorchQuantizeDelegator):
         self.rewards[self.last_selected].push(rewards)
 
     def finalize(self) -> bool:
-        self.config.scale = self.reference * self.arms[np.argmax([ema.pop() for ema in self.rewards])]
+        self.config.scale = (
+            self.reference * self.arms[np.argmax([ema.pop() for ema in self.rewards])]
+        )
 
     def withdraw(self):
         self.config.scale = self.reference
 
-    def __call__(self, tensor: torch.Tensor,
-                 config: TensorQuantizationConfig) -> torch.Tensor:
+    def __call__(
+        self, tensor: torch.Tensor, config: TensorQuantizationConfig
+    ) -> torch.Tensor:
         config.scale = self.reference * self.arms[self.roll()]
         return PPQLinearQuantFunction(tensor, config)

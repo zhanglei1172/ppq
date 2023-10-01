@@ -17,29 +17,35 @@ import pickle
 def is_file_exist(file: str):
     if os.path.exists(file):
         return os.path.isfile(file)
-    else: return False
+    else:
+        return False
 
 
-@ ppq_file_io
-def open_txt_file_from_writing(file: str, mode: str, encoding: str='utf-8'):
-    if is_file_exist(file): raise IOError('Writing File ')
+@ppq_file_io
+def open_txt_file_from_writing(file: str, mode: str, encoding: str = "utf-8"):
+    if is_file_exist(file):
+        raise IOError("Writing File ")
 
 
-class Serializable():
+class Serializable:
     """An interface which means a class instance is binary serializable,
     nothing funny."""
+
     def __init__(self) -> None:
         self._export_value = PPQ_CONFIG.DUMP_VALUE_WHEN_EXPORT
 
     def __setstate__(self, state: dict):
         if not isinstance(state, dict):
-            raise TypeError(f'PPQ Data Load Failure. Can not load data from {type(state)}, '
-                'Your data might get damaged.')
+            raise TypeError(
+                f"PPQ Data Load Failure. Can not load data from {type(state)}, "
+                "Your data might get damaged."
+            )
 
-        if '__version__' not in state or state['__version__'] != PPQ_CONFIG.VERSION:
+        if "__version__" not in state or state["__version__"] != PPQ_CONFIG.VERSION:
             ppq_warning(
-                'You are loading an object created by PPQ with different version,'
-                ' it might cause some problems.')
+                "You are loading an object created by PPQ with different version,"
+                " it might cause some problems."
+            )
 
         for key, value in state.items():
             self.__dict__[key] = value
@@ -49,14 +55,16 @@ class Serializable():
 
     def __getstate__(self) -> dict:
         attribute_dicts = self.__dict__
-        attribute_dicts['__version__'] = PPQ_CONFIG.VERSION
+        attribute_dicts["__version__"] = PPQ_CONFIG.VERSION
         serialized = dict()
 
         for name, value in attribute_dicts.items():
             if isinstance(value, np.ndarray) or isinstance(value, torch.Tensor):
-                if self._export_value is False: value = None
+                if self._export_value is False:
+                    value = None
                 serialized[name] = ValueState(value)
-            else: serialized[name] = value
+            else:
+                serialized[name] = value
         return serialized
 
 
@@ -80,18 +88,20 @@ class ValueState(Serializable):
             self._shape = None
             self._value = None
         else:
-            raise TypeError(f'PPQ Data Dump Failure, can not dump value type {type(value)}')
+            raise TypeError(
+                f"PPQ Data Dump Failure, can not dump value type {type(value)}"
+            )
 
     def unpack(self) -> Any:
         if self._value_type == str(None.__class__.__name__):
             return None
-        elif self._value_type == str('ndarray'):
+        elif self._value_type == str("ndarray"):
             value = pickle.loads(self._value)
             assert isinstance(value, np.ndarray)
             value = value.astype(self._dtype)
             value = value.reshape(self._shape)
             return value
-        elif self._value_type == str('Tensor'):
+        elif self._value_type == str("Tensor"):
             if self._value is not None:
                 value = pickle.loads(self._value)
                 assert isinstance(value, np.ndarray)
@@ -99,10 +109,12 @@ class ValueState(Serializable):
                 if value is not None:
                     value = value.reshape(self._shape)
                 value = convert_any_to_torch_tensor(
-                    value, device='cpu', 
-                    dtype=DataType.to_torch(DataType.convert_from_numpy(self._dtype)))
+                    value,
+                    device="cpu",
+                    dtype=DataType.to_torch(DataType.convert_from_numpy(self._dtype)),
+                )
                 return value
             else:
-                return torch.tensor([], device='cpu')
-        elif self._value_type in {'list', 'tuple', 'dict'}:
+                return torch.tensor([], device="cpu")
+        elif self._value_type in {"list", "tuple", "dict"}:
             return self._value

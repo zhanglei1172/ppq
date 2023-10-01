@@ -2,12 +2,25 @@ import json
 import onnx
 import torch
 from onnx import helper, numpy_helper
-from ppq.core import (GRAPH_OPSET_ATTRIB, ONNX_EXPORT_OPSET, ONNX_VERSION,
-                      PPQ_CONFIG, DataType, QuantizationStates,
-                      convert_any_to_numpy, ppq_warning)
+from ppq.core import (
+    GRAPH_OPSET_ATTRIB,
+    ONNX_EXPORT_OPSET,
+    ONNX_VERSION,
+    PPQ_CONFIG,
+    DataType,
+    QuantizationStates,
+    convert_any_to_numpy,
+    ppq_warning,
+)
 from ppq.core.quant import QuantizationProperty
-from ppq.IR import (BaseGraph, GraphExporter, Operation, OperationExporter,
-                    QuantableOperation, Variable)
+from ppq.IR import (
+    BaseGraph,
+    GraphExporter,
+    Operation,
+    OperationExporter,
+    QuantableOperation,
+    Variable,
+)
 
 
 class ConstantOfShapeExporter(OperationExporter):
@@ -65,7 +78,6 @@ class TengineExporter(GraphExporter):
         super().__init__()
 
     def export_quantization_scale(self, scale_path: str, graph: BaseGraph):
-
         var_scales = {}
 
         # Render quantization config.
@@ -73,10 +85,14 @@ class TengineExporter(GraphExporter):
             if isinstance(operation, QuantableOperation):
                 for config, _var in operation.config_with_variable:
                     if config.policy.has_property(QuantizationProperty.PER_CHANNEL):
-                        raise PermissionError('Tengine does not support per channel quantization.')
-                    
-                    if (QuantizationStates.is_activated(config.state)
-                        or config.state == QuantizationStates.OVERLAPPED):
+                        raise PermissionError(
+                            "Tengine does not support per channel quantization."
+                        )
+
+                    if (
+                        QuantizationStates.is_activated(config.state)
+                        or config.state == QuantizationStates.OVERLAPPED
+                    ):
                         var_scales[_var.name] = {
                             "scale": config.scale.item(),
                             "zero_point": config.offset.item(),
@@ -89,7 +105,6 @@ class TengineExporter(GraphExporter):
                 file.write(f"{k} {scale} {zp}\n")
 
     def export_quantization_config(self, config_path: str, graph: BaseGraph):
-
         render_buffer = {"configs": {}, "dispatchings": {}, "values": {}}
 
         # Render quantization config.
@@ -110,7 +125,9 @@ class TengineExporter(GraphExporter):
 
                 for config, _ in operation.config_with_variable:
                     if config.policy.has_property(QuantizationProperty.PER_CHANNEL):
-                        raise PermissionError('Tengine does not support per channel quantization.')
+                        raise PermissionError(
+                            "Tengine does not support per channel quantization."
+                        )
 
                     if config.dominated_by == config:
                         render_buffer["values"][config.__hash__()] = {

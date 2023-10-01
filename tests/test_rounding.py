@@ -1,7 +1,7 @@
 from ppq.core.quant import RoundingPolicy
 from ppq.utils.round import ppq_numerical_round, ppq_round_to_power_of_2
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     assert ppq_numerical_round(1.5, policy=RoundingPolicy.ROUND_HALF_EVEN) == 2
     assert ppq_numerical_round(2.5, policy=RoundingPolicy.ROUND_HALF_EVEN) == 2
     assert ppq_numerical_round(0.5, policy=RoundingPolicy.ROUND_HALF_EVEN) == 0

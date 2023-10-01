@@ -1,4 +1,3 @@
-
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Any, Callable, List, Union
 
@@ -64,11 +63,11 @@ class GraphCommandProcessor(Callable, metaclass=ABCMeta):
                 the graph being executed or previous GraphCommandProcessor in the chain
         """
         if isinstance(graph_or_processor, GraphCommandProcessor):
-            self._next_command_processor   = graph_or_processor
-            self._graph                    = graph_or_processor._graph
+            self._next_command_processor = graph_or_processor
+            self._graph = graph_or_processor._graph
         else:
-            self._next_command_processor   = None
-            self._graph                    = graph_or_processor
+            self._next_command_processor = None
+            self._graph = graph_or_processor
 
     @property
     @abstractproperty
@@ -88,7 +87,8 @@ class GraphCommandProcessor(Callable, metaclass=ABCMeta):
             List[GraphCommandType]: all acceptable GraphCommandTypes
         """
         raise NotImplementedError(
-            'Oh, seems you forgot to implement GraphCommandProcessor._acceptable_command_types function')
+            "Oh, seems you forgot to implement GraphCommandProcessor._acceptable_command_types function"
+        )
 
     def __call__(self, command: GraphCommand) -> Any:
         """Invoking interface of GraphCommandProcessor responsibility chain.
@@ -123,7 +123,7 @@ class GraphCommandProcessor(Callable, metaclass=ABCMeta):
 
         if not isinstance(command, GraphCommand):
             raise ValueError(
-                f'command should be an instance of GraphCommand, {type(command)} received yet.'
+                f"command should be an instance of GraphCommand, {type(command)} received yet."
             )
 
         if command.command_type in self._acceptable_command_types():
@@ -134,9 +134,9 @@ class GraphCommandProcessor(Callable, metaclass=ABCMeta):
 
         else:
             raise ValueError(
-                f'Command Type {command.command_type} is not acceptable in this graph, ' \
-                'please make sure you have added proper command processor into processing chain.\n'\
-                'For more information, you may refer to ppq.IR.graph.GraphCommandType'
+                f"Command Type {command.command_type} is not acceptable in this graph, "
+                "please make sure you have added proper command processor into processing chain.\n"
+                "For more information, you may refer to ppq.IR.graph.GraphCommandType"
             )
 
     def acceptable_command_types(self) -> List[GraphCommandType]:
@@ -147,14 +147,15 @@ class GraphCommandProcessor(Callable, metaclass=ABCMeta):
             List[GraphCommandType]: all acceptable command types
         """
         my_types = self._acceptable_command_types()
-        assert isinstance(my_types, list), \
-            'GraphCommandProcessor.__acceptable_command_types must return a list of GraphCommandType'
+        assert isinstance(
+            my_types, list
+        ), "GraphCommandProcessor.__acceptable_command_types must return a list of GraphCommandType"
 
         if self._next_command_processor is not None:
             other_types = self._next_command_processor.acceptable_command_types()
         return my_types.extend(other_types)
 
-    @ abstractmethod
+    @abstractmethod
     def process(self, command: GraphCommand) -> Any:
         """Subclass of GraphCommandProcessor must give an implementation of
         this function.
@@ -168,18 +169,18 @@ class GraphCommandProcessor(Callable, metaclass=ABCMeta):
             Any: any result is fine.
         """
         raise NotImplementedError(
-            'Oh, seems you forgot to implement GraphCommandProcessor.process function(or may be forgot to return?)')
+            "Oh, seems you forgot to implement GraphCommandProcessor.process function(or may be forgot to return?)"
+        )
 
-    @ property
+    @property
     def graph(self) -> BaseGraph:
         return self._graph
 
     def __str__(self) -> str:
-        return f'GraphCommandProcessor {self.__hash__}'
+        return f"GraphCommandProcessor {self.__hash__}"
 
 
 class DefaultGraphProcessor(GraphCommandProcessor):
-
     def _acceptable_command_types(self) -> List[GraphCommandType]:
         return []
 

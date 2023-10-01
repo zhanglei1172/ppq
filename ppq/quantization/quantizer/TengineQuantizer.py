@@ -1,9 +1,15 @@
 from typing import Union
 
 import torch
-from ppq.core import (PASSIVE_OPERATIONS, OperationQuantizationConfig,
-                      QuantizationPolicy, QuantizationProperty,
-                      QuantizationStates, RoundingPolicy, TargetPlatform)
+from ppq.core import (
+    PASSIVE_OPERATIONS,
+    OperationQuantizationConfig,
+    QuantizationPolicy,
+    QuantizationProperty,
+    QuantizationStates,
+    RoundingPolicy,
+    TargetPlatform,
+)
 from ppq.IR import BaseGraph, GraphCommandProcessor, Operation
 
 from .base import BaseQuantizer

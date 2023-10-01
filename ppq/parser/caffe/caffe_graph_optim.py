@@ -5,7 +5,8 @@ from ppq.log import NaiveLogger
 
 from . import ppl_caffe_pb2
 
-logger = NaiveLogger.get_logger('PPQ')
+logger = NaiveLogger.get_logger("PPQ")
+
 
 def de_inplace(net_def: ppl_caffe_pb2.NetParameter) -> ppl_caffe_pb2.NetParameter:
     """Remove inplace layer in netdef If the names of bottom and top are same,
@@ -15,7 +16,7 @@ def de_inplace(net_def: ppl_caffe_pb2.NetParameter) -> ppl_caffe_pb2.NetParamete
         if current_write_times[_name] == total_write_times[_name]:
             return _name
         else:
-            return f'{_name}_ver{current_write_times[_name]}'
+            return f"{_name}_ver{current_write_times[_name]}"
 
     total_write_times = {}
     for layer in net_def.layer:
@@ -39,20 +40,29 @@ def de_inplace(net_def: ppl_caffe_pb2.NetParameter) -> ppl_caffe_pb2.NetParamete
 
     return net_def
 
-def merge_batchnorm_scale(caffe_net: ppl_caffe_pb2.NetParameter) -> ppl_caffe_pb2.NetParameter:
+
+def merge_batchnorm_scale(
+    caffe_net: ppl_caffe_pb2.NetParameter,
+) -> ppl_caffe_pb2.NetParameter:
     new_net = ppl_caffe_pb2.NetParameter()
     new_net.CopyFrom(caffe_net)
-    new_net.ClearField('layer')
+    new_net.ClearField("layer")
 
     idx = 0
     while idx < len(caffe_net.layer):
-        if idx != len(caffe_net.layer) - 1 and caffe_net.layer[idx].type == 'BatchNorm' and caffe_net.layer[idx + 1].type == 'Scale':
+        if (
+            idx != len(caffe_net.layer) - 1
+            and caffe_net.layer[idx].type == "BatchNorm"
+            and caffe_net.layer[idx + 1].type == "Scale"
+        ):
             batchnorm_layer = caffe_net.layer[idx]
             scale_layer = caffe_net.layer[idx + 1]
             if not batchnorm_layer.batch_norm_param.use_global_stats:
-                logger.warning('Now cannot convert BatchNorm layer with use_global_stats==False. Change it to True')
+                logger.warning(
+                    "Now cannot convert BatchNorm layer with use_global_stats==False. Change it to True"
+                )
             # Generate BN layer from batchnorm + scale
-            layer = ppl_caffe_pb2.LayerParameter(type='BN', name=batchnorm_layer.name)
+            layer = ppl_caffe_pb2.LayerParameter(type="BN", name=batchnorm_layer.name)
             layer.bottom[:] = batchnorm_layer.bottom[:]
             layer.top[:] = scale_layer.top[:]
             # Set attribute
@@ -68,7 +78,7 @@ def merge_batchnorm_scale(caffe_net: ppl_caffe_pb2.NetParameter) -> ppl_caffe_pb
                 layer.blobs.extend([bias_blob])
             else:
                 # bias = 0
-                bias_blob.data.extend(np.zeros(len(weight_blob.data), dtype='f'))
+                bias_blob.data.extend(np.zeros(len(weight_blob.data), dtype="f"))
                 layer.blobs.extend([bias_blob])
 
             mean_blob = ppl_caffe_pb2.BlobProto()
@@ -79,12 +89,16 @@ def merge_batchnorm_scale(caffe_net: ppl_caffe_pb2.NetParameter) -> ppl_caffe_pb
             layer.blobs.extend([var_blob])
             # Update running_mean and running_var according to scale_factor
             if len(batchnorm_layer.blobs) == 3:
-                factor = np.array(batchnorm_layer.blobs[2].data, dtype='f')
-                layer.blobs[2].ClearField('data')
-                running_mean = np.array(batchnorm_layer.blobs[0].data, dtype='f') / factor
+                factor = np.array(batchnorm_layer.blobs[2].data, dtype="f")
+                layer.blobs[2].ClearField("data")
+                running_mean = (
+                    np.array(batchnorm_layer.blobs[0].data, dtype="f") / factor
+                )
                 layer.blobs[2].data.extend(running_mean)
-                layer.blobs[3].ClearField('data')
-                running_var = np.array(batchnorm_layer.blobs[1].data, dtype='f') / factor
+                layer.blobs[3].ClearField("data")
+                running_var = (
+                    np.array(batchnorm_layer.blobs[1].data, dtype="f") / factor
+                )
                 layer.blobs[3].data.extend(running_var)
 
             new_net.layer.extend([layer])
@@ -96,7 +110,10 @@ def merge_batchnorm_scale(caffe_net: ppl_caffe_pb2.NetParameter) -> ppl_caffe_pb
             idx += 1
     return new_net
 
-def optimize_for_export(caffe_net: ppl_caffe_pb2.NetParameter) -> ppl_caffe_pb2.NetParameter:
+
+def optimize_for_export(
+    caffe_net: ppl_caffe_pb2.NetParameter,
+) -> ppl_caffe_pb2.NetParameter:
     """Simplify some caffe ops Pattern 1: combine multi-slices to one Pattern
     2: combine multi-eltwise back to one."""
     slice_combine(caffe_net)
@@ -105,7 +122,7 @@ def optimize_for_export(caffe_net: ppl_caffe_pb2.NetParameter) -> ppl_caffe_pb2.
 
 
 def slice_combine(caffe_net: ppl_caffe_pb2.NetParameter):
-    slice_layer = [layer for layer in caffe_net.layer if layer.type == 'Slice']
+    slice_layer = [layer for layer in caffe_net.layer if layer.type == "Slice"]
     slice_opt_set = []
     matched = []
     # Get all slice_set which can be merged together
@@ -116,8 +133,9 @@ def slice_combine(caffe_net: ppl_caffe_pb2.NetParameter):
             slice_set = [slice_layer[i]]
         for j in range(i + 1, len(slice_layer)):
             if slice_layer[j] not in matched:
-                same_flag = (slice_layer[i].bottom == slice_layer[j].bottom) and \
-                            (slice_layer[i].slice_param.axis == slice_layer[j].slice_param.axis)
+                same_flag = (slice_layer[i].bottom == slice_layer[j].bottom) and (
+                    slice_layer[i].slice_param.axis == slice_layer[j].slice_param.axis
+                )
                 if same_flag:
                     slice_set.append(slice_layer[j])
         if len(slice_set) > 1:
@@ -141,19 +159,29 @@ def slice_combine(caffe_net: ppl_caffe_pb2.NetParameter):
         # An example: changed_name_dict = {'338_front': '337', '337_behind': '338'}
         new_top = []
         for names in name_dict.values():
-            key = [name for name in names if ('_front' not in name) and ('_behind' not in name)]
+            key = [
+                name
+                for name in names
+                if ("_front" not in name) and ("_behind" not in name)
+            ]
             if not key:
                 key = names[0]
-                logger.warning(f'Cannot find origin name in slice combination. Use {key}')
+                logger.warning(
+                    f"Cannot find origin name in slice combination. Use {key}"
+                )
             else:
-                assert len(key) == 1, 'Find multiple origin names in slice combination. Only support one.'
+                assert (
+                    len(key) == 1
+                ), "Find multiple origin names in slice combination. Only support one."
                 key = key[0]
             new_top.append(key)
             names.remove(key)
             changed_name_dict.update([(i, key) for i in names])
 
         remained_layer.top[:] = new_top
-        remained_layer.slice_param.slice_point[:] = slice_point[1:]  # remove 0 in slice_point
+        remained_layer.slice_param.slice_point[:] = slice_point[
+            1:
+        ]  # remove 0 in slice_point
 
         # update changed name
         for layer in caffe_net.layer:
@@ -166,13 +194,13 @@ def slice_combine(caffe_net: ppl_caffe_pb2.NetParameter):
 
 
 def eltwise_combine(caffe_net: ppl_caffe_pb2.NetParameter):
-    eltwise_layer = [layer for layer in caffe_net.layer if layer.type == 'Eltwise']
+    eltwise_layer = [layer for layer in caffe_net.layer if layer.type == "Eltwise"]
     # Step 1: Combine mul op generated from coeff != 1.0 in origin caffe eltwise op
     eltwise_opt_set = []
     matched = []
     # Get all eltwise_set which can be merged together
     for i in range(len(eltwise_layer)):
-        if '_mul' not in eltwise_layer[i].name:
+        if "_mul" not in eltwise_layer[i].name:
             eltwise_set = [eltwise_layer[i]]
             find_out = eltwise_layer[i].bottom
         else:
@@ -181,7 +209,7 @@ def eltwise_combine(caffe_net: ppl_caffe_pb2.NetParameter):
         for layer in eltwise_layer:
             if layer not in matched:
                 # Eltwise only has 1 output
-                same_flag = ('_mul' in layer.name) and (layer.top[0] in find_out)
+                same_flag = ("_mul" in layer.name) and (layer.top[0] in find_out)
                 if same_flag:
                     eltwise_set.append(layer)
 
@@ -190,8 +218,8 @@ def eltwise_combine(caffe_net: ppl_caffe_pb2.NetParameter):
             matched.extend(eltwise_set)
     # Merge mul op
     for eltwise_set in eltwise_opt_set:
-        remained_layer = [layer for layer in eltwise_set if '_mul' not in layer.name]
-        assert len(remained_layer) == 1, f'Cannot find root layer for {eltwise_set[0]}'
+        remained_layer = [layer for layer in eltwise_set if "_mul" not in layer.name]
+        assert len(remained_layer) == 1, f"Cannot find root layer for {eltwise_set[0]}"
         remained_layer = remained_layer[0]
         eltwise_set.remove(remained_layer)
 
@@ -218,9 +246,21 @@ def eltwise_combine(caffe_net: ppl_caffe_pb2.NetParameter):
         eltwise_set = [layer_target]
         for layer_find in eltwise_layer:
             # the layer_target must only have one successor
-            same_flag = (layer_target.eltwise_param.operation == layer_find.eltwise_param.operation) and \
-                (layer_target.top[0] in layer_find.bottom) and \
-                len([layer for layer in caffe_net.layer if layer_target.top[0] in layer.bottom]) == 1
+            same_flag = (
+                (
+                    layer_target.eltwise_param.operation
+                    == layer_find.eltwise_param.operation
+                )
+                and (layer_target.top[0] in layer_find.bottom)
+                and len(
+                    [
+                        layer
+                        for layer in caffe_net.layer
+                        if layer_target.top[0] in layer.bottom
+                    ]
+                )
+                == 1
+            )
             if same_flag:
                 eltwise_set.append(layer_find)
 

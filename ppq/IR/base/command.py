@@ -8,7 +8,7 @@ from .graph import Operation, Variable
 class GraphCommandType(Enum):
     # convert value inside graph to torch.tensor(usually from numpy)
     CONVERT_TO_TENSOR = 0
-    
+
     # 图上权重部署到 GPU(tensor)，由 RunnableGraph 进行处理
     # deploy graph weights to GPU
     DEPLOY_TO_CUDA = 1
@@ -96,7 +96,7 @@ class GraphCommandType(Enum):
     FORMAT_SLICE = 29
     # 从一个指定位置将图截断
     TRUNCATE_ON_VAR = 30
-    
+
     # 升级图中的 resize 到 opset 11
     FORMAT_RESIZE = 31
 
@@ -111,25 +111,27 @@ class GraphCommandType(Enum):
     # remove all identity ops from your graph
     REMOVE_IDENTITY = 35
 
-class GraphCommand():
+
+class GraphCommand:
     def __init__(self, command_type: GraphCommandType, **kwargs) -> None:
-        assert isinstance(command_type, GraphCommandType), \
-            f'Command Type must be a GraphCommandType object, but {type(command_type)} received.'
+        assert isinstance(
+            command_type, GraphCommandType
+        ), f"Command Type must be a GraphCommandType object, but {type(command_type)} received."
         self.command_type = command_type
         self.kwargs = kwargs
 
     def __str__(self) -> str:
-        return f'GraphCommand object {self.__hash__()},\t Command type: {self.command_type},\t Args:{self.kwargs}'
+        return f"GraphCommand object {self.__hash__()},\t Command type: {self.command_type},\t Args:{self.kwargs}"
 
 
 class GraphDeployCommand(GraphCommand):
     def __init__(self, device: str) -> None:
-        if device.startswith('cuda'):
+        if device.startswith("cuda"):
             super().__init__(GraphCommandType.DEPLOY_TO_CUDA)
-        elif device.startswith('cpu'):
+        elif device.startswith("cpu"):
             super().__init__(GraphCommandType.DEPLOY_TO_CPU)
         else:
-            raise ValueError(f'Device type {device} not understand.')
+            raise ValueError(f"Device type {device} not understand.")
         self._device = device
 
     def __str__(self) -> str:
@@ -137,7 +139,12 @@ class GraphDeployCommand(GraphCommand):
 
 
 class QuantizeOperationCommand(GraphCommand):
-    def __init__(self, op_name: str, target_platform: TargetPlatform, config: OperationQuantizationConfig) -> None:
+    def __init__(
+        self,
+        op_name: str,
+        target_platform: TargetPlatform,
+        config: OperationQuantizationConfig,
+    ) -> None:
         super().__init__(command_type=GraphCommandType.QUANTIZE_OPERATION)
         self.op_name = op_name
         self.target_platform = target_platform

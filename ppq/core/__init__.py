@@ -47,26 +47,49 @@ Do not modify codes within this directory if not necessary.
 
 from .common import *
 from .config import PPQ_CONFIG
-from .data import (DataType, OperationMeta, TensorMeta, convert_any_to_numpy,
-                   convert_any_to_python_primary_type, convert_any_to_string,
-                   convert_any_to_torch_tensor, convert_primary_type_to_list)
-from .defs import (SingletonMeta, empty_ppq_cache, ppq_debug_function,
-                   ppq_file_io, ppq_info, ppq_legacy,
-                   ppq_quant_param_computing_function, ppq_warning)
+from .data import (
+    DataType,
+    OperationMeta,
+    TensorMeta,
+    convert_any_to_numpy,
+    convert_any_to_python_primary_type,
+    convert_any_to_string,
+    convert_any_to_torch_tensor,
+    convert_primary_type_to_list,
+)
+from .defs import (
+    SingletonMeta,
+    empty_ppq_cache,
+    ppq_debug_function,
+    ppq_file_io,
+    ppq_info,
+    ppq_legacy,
+    ppq_quant_param_computing_function,
+    ppq_warning,
+)
 from .ffi import CUDA
-from .quant import (ChannelwiseTensorQuantizationConfig, NetworkFramework,
-                    OperationQuantizationConfig, QuantizationPolicy,
-                    QuantizationProperty, QuantizationStates, RoundingPolicy,
-                    TargetPlatform, TensorQuantizationConfig, QuantizationVisibility)
-from .storage import (Serializable, ValueState, is_file_exist,
-                      open_txt_file_from_writing)
+from .quant import (
+    ChannelwiseTensorQuantizationConfig,
+    NetworkFramework,
+    OperationQuantizationConfig,
+    QuantizationPolicy,
+    QuantizationProperty,
+    QuantizationStates,
+    RoundingPolicy,
+    TargetPlatform,
+    TensorQuantizationConfig,
+    QuantizationVisibility,
+)
+from .storage import Serializable, ValueState, is_file_exist, open_txt_file_from_writing
 from typing import Any, Callable, List, Iterable, Set, Dict, Union, Text
 
-print("""
+print(
+    """
       ____  ____  __   ____                    __              __
      / __ \/ __ \/ /  / __ \__  ______ _____  / /_____  ____  / /
     / /_/ / /_/ / /  / / / / / / / __ `/ __ \/ __/ __ \/ __ \/ /
    / ____/ ____/ /__/ /_/ / /_/ / /_/ / / / / /_/ /_/ / /_/ / /
   /_/   /_/   /_____\___\_\__,_/\__,_/_/ /_/\__/\____/\____/_/
 
-""")
+"""
+)

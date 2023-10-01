@@ -22,9 +22,10 @@ class ExtensionPass(QuantizationOptimizationPass):
 
     You can overwrite logic inside this pass.
     """
+
     def __init__(self, parameter: str) -> None:
         self.parameter = parameter
-        super().__init__(name='PPQ Extension Pass')
+        super().__init__(name="PPQ Extension Pass")
 
     def optimize(
         self,
@@ -35,4 +36,4 @@ class ExtensionPass(QuantizationOptimizationPass):
     ) -> None:
         assert isinstance(graph, BaseGraph)
 
-        print('You are invoking Extension Pass now.')
+        print("You are invoking Extension Pass now.")

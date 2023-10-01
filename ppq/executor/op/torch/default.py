@@ -2,9 +2,13 @@ import operator
 from functools import reduce
 from typing import List
 
-from ppq.core import (GRU_FLATTEN_WEIGHT_ATTRIB, LSTM_FLATTEN_WEIGHT_ATTRIB,
-                      DataType, TargetPlatform,
-                      convert_any_to_python_primary_type)
+from ppq.core import (
+    GRU_FLATTEN_WEIGHT_ATTRIB,
+    LSTM_FLATTEN_WEIGHT_ATTRIB,
+    DataType,
+    TargetPlatform,
+    convert_any_to_python_primary_type,
+)
 from ppq.IR import Operation
 from ppq.log import NaiveLogger
 from ppq.utils import process_attribute
@@ -19,57 +23,69 @@ from .base import *
 # onnx op: https://github.com/onnx/onnx/blob/master/docs/Operators.md
 # torch func: https://pytorch.org/docs/stable/nn.functional.html
 
-logger = NaiveLogger.get_logger('PPQ')
+logger = NaiveLogger.get_logger("PPQ")
 
-def convert_onnx_pads_to_torch(onnx_pads: List[int], mode: str=None) -> List[int]:
+
+def convert_onnx_pads_to_torch(onnx_pads: List[int], mode: str = None) -> List[int]:
     # Convert padding from onnx format to torch format
     # onnx format: [x1_begin, x2_begin, ... , x1_end, x2_end, ...]
     # torch format [xn_begin, xn_end, ... , x2_begin, x2_end, x1_begin, x1_end]
-    if onnx_pads is None: return 0
-    if isinstance(onnx_pads, int): return onnx_pads
+    if onnx_pads is None:
+        return 0
+    if isinstance(onnx_pads, int):
+        return onnx_pads
 
     # check pads dimension
     if mode is not None:
-        if mode == '1d': assert len(onnx_pads) == 2, (
-            f'1d Operation needs 2-d padding value, while your padding value is {onnx_pads}')
-        elif mode == '2d': assert len(onnx_pads) == 4, (
-            f'2d Operation needs 4-d padding value, while your padding value is {onnx_pads}')
-        elif mode == '3d': assert len(onnx_pads) == 6, (
-            f'3d Operation needs 6-d padding value, while your padding value is {onnx_pads}')
+        if mode == "1d":
+            assert (
+                len(onnx_pads) == 2
+            ), f"1d Operation needs 2-d padding value, while your padding value is {onnx_pads}"
+        elif mode == "2d":
+            assert (
+                len(onnx_pads) == 4
+            ), f"2d Operation needs 4-d padding value, while your padding value is {onnx_pads}"
+        elif mode == "3d":
+            assert (
+                len(onnx_pads) == 6
+            ), f"3d Operation needs 6-d padding value, while your padding value is {onnx_pads}"
 
     middle = len(onnx_pads) // 2
     onnx_pad_begin, onnx_pad_end = onnx_pads[:middle], onnx_pads[middle:]
     onnx_pad_begin, onnx_pad_end = onnx_pad_begin[::-1], onnx_pad_end[::-1]
-    
+
     torch_pads = []
     for begin, end in zip(onnx_pad_begin, onnx_pad_end):
         torch_pads.extend([begin, end])
 
-    if mode is None: return torch_pads
+    if mode is None:
+        return torch_pads
     # check if we can merge torch pads
     if len(torch_pads) == 2:
         p1, p2 = torch_pads
-        if p1 == p2: 
+        if p1 == p2:
             torch_pads = [p1]
     if len(torch_pads) == 4:
         p1, p2, p3, p4 = torch_pads
-        if p1==p2 and p3==p4: 
-            torch_pads=[p1, p3]
+        if p1 == p2 and p3 == p4:
+            torch_pads = [p1, p3]
     if len(torch_pads) == 6:
         p1, p2, p3, p4, p5, p6 = torch_pads
-        if p1==p2 and p3==p4 and p5==p6: 
-            torch_pads=[p1, p3, p5]
+        if p1 == p2 and p3 == p4 and p5 == p6:
+            torch_pads = [p1, p3, p5]
     return torch_pads
 
 
-def Abs_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
-    """Absolute takes one input data (Tensor) and produces one output data (Tensor) 
+def Abs_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
+    """Absolute takes one input data (Tensor) and produces one output data (Tensor)
     where the absolute is, y = abs(x), is applied to the tensor elementwise.
 
     Inputs
         X (differentiable) : T
             Input tensor
-    
+
     Outputs
         Y (differentiable) : T
             Output tensor
@@ -87,20 +103,22 @@ def Abs_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     return x.abs()
 
 
-def Attention_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Attention_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """
     com.microsoft.Attention
-        Multi-Head Self Attention that can be either unidirectional (like GPT-2) or bidirectional (like BERT). 
-        The mask_index input is optional. Besides raw attention mask with shape 
-        (batch_size, past_sequence_length + sequence_length) or 
-        (batch_size, sequence_length, past_sequence_length + sequence_length) with value 0 for masked and 1 otherwise, 
-        
-        we also support other two formats: When input has right-side padding, 
-        mask_index is one dimension with shape (batch_size), where value of each element is the end position, 
-        or valid length of actual sequence excluding padding. When input has left-side padding, mask_index has shape (2 * batch_size), 
-        where the values are the exclusive end positions followed by the inclusive start positions. When unidirectional is 1, 
-        and each token only attend to previous tokens. For GPT-2, both past and present state are optional. 
-        
+        Multi-Head Self Attention that can be either unidirectional (like GPT-2) or bidirectional (like BERT).
+        The mask_index input is optional. Besides raw attention mask with shape
+        (batch_size, past_sequence_length + sequence_length) or
+        (batch_size, sequence_length, past_sequence_length + sequence_length) with value 0 for masked and 1 otherwise,
+
+        we also support other two formats: When input has right-side padding,
+        mask_index is one dimension with shape (batch_size), where value of each element is the end position,
+        or valid length of actual sequence excluding padding. When input has left-side padding, mask_index has shape (2 * batch_size),
+        where the values are the exclusive end positions followed by the inclusive start positions. When unidirectional is 1,
+        and each token only attend to previous tokens. For GPT-2, both past and present state are optional.
+
         Present state could appear in output even when past state is not in input.
 
     Version
@@ -109,78 +127,90 @@ def Attention_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacke
     Attributes
         num_heads : int (required)
             Number of attention heads
-    
+
         qkv_hidden_sizes : list of ints
             Hidden layer sizes of Q, K, V paths in Attention
-        
+
         unidirectional : int
             Whether every token can only attend to previous tokens. Default value is 0.
-    
+
     Inputs (3 - 6)
         input : T
             3D input tensor with shape (batch_size, sequence_length, input_hidden_size)
-    
+
         weight : T
             2D input tensor with shape (input_hidden_size, 3 * hidden_size), where hidden_size = num_heads * head_size
-    
+
         bias : T
             1D input tensor with shape (3 * hidden_size)
-    
+
         mask_index (optional) : M
-            Attention mask with shape (batch_size, 1, max_sequence_length, max_sequence_length), 
-            (batch_size, past_sequence_length + sequence_length)  
-            or (batch_size, sequence_length, past_sequence_length + sequence_length), 
+            Attention mask with shape (batch_size, 1, max_sequence_length, max_sequence_length),
+            (batch_size, past_sequence_length + sequence_length)
+            or (batch_size, sequence_length, past_sequence_length + sequence_length),
             or index with shape (batch_size) or (2 * batch_size).
 
         past (optional) : T
             past state for key and value with shape (2, batch_size, num_heads, past_sequence_length, head_size).
-    
+
         extra_add (optional) : T
             additional add to QxK' with shape (batch_size, num_heads, sequence_length, sequence_length).
-    
+
     Outputs (1 - 2)
         output : T
             3D output tensor with shape (batch_size, sequence_length, hidden_size)
-    
+
         present (optional) : T
-            present state for key and value with shape 
+            present state for key and value with shape
             (2, batch_size, num_heads, past_sequence_length + sequence_length, head_size)
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=3, max_num_of_input=6)
-    num_heads        = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='num_heads', compulsive=True)
-    qkv_hidden_sizes = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='qkv_hidden_sizes', default=0)
-    unidirectional   = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='unidirectional', default=0)
+    num_heads = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="num_heads", compulsive=True
+    )
+    qkv_hidden_sizes = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="qkv_hidden_sizes", default=0
+    )
+    unidirectional = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="unidirectional", default=0
+    )
     if unidirectional != 0:
-        raise NotImplementedError('Attention Layer with unidirectional != 0 is not implemented.')
-    
+        raise NotImplementedError(
+            "Attention Layer with unidirectional != 0 is not implemented."
+        )
+
     input, weight, bias = values[:3]
-    mask_index          = values[3] if len(values) >= 4 else None
-    past                = values[4] if len(values) >= 5 else None
-    extra_add           = values[5] if len(values) >= 6 else None
+    mask_index = values[3] if len(values) >= 4 else None
+    past = values[4] if len(values) >= 5 else None
+    extra_add = values[5] if len(values) >= 6 else None
 
     if mask_index is not None or past is not None:
-        raise NotImplementedError('Attention Layer with mask_index and past != None is not implemented.')
+        raise NotImplementedError(
+            "Attention Layer with mask_index and past != None is not implemented."
+        )
 
     BATCHSIZE, NUM_OF_HEADS, HIDDEN_SIZE = input.shape[0], num_heads, qkv_hidden_sizes
     HEAD_SIZE = HIDDEN_SIZE // NUM_OF_HEADS
 
     qkv = torch.matmul(input, weight) + bias
-    q   = qkv[:, :, HIDDEN_SIZE * 0: HIDDEN_SIZE * 1]
-    k   = qkv[:, :, HIDDEN_SIZE * 1: HIDDEN_SIZE * 2]
-    v   = qkv[:, :, HIDDEN_SIZE * 2: HIDDEN_SIZE * 3]
+    q = qkv[:, :, HIDDEN_SIZE * 0 : HIDDEN_SIZE * 1]
+    k = qkv[:, :, HIDDEN_SIZE * 1 : HIDDEN_SIZE * 2]
+    v = qkv[:, :, HIDDEN_SIZE * 2 : HIDDEN_SIZE * 3]
 
     q = q.reshape(BATCHSIZE, -1, NUM_OF_HEADS, HEAD_SIZE).permute(0, 2, 1, 3)
     k = k.reshape(BATCHSIZE, -1, NUM_OF_HEADS, HEAD_SIZE).permute(0, 2, 1, 3)
     v = v.reshape(BATCHSIZE, -1, NUM_OF_HEADS, HEAD_SIZE).permute(0, 2, 1, 3)
 
-    attn_score = (q @ k.transpose(-2, -1)) * (HEAD_SIZE ** -0.5) + extra_add
+    attn_score = (q @ k.transpose(-2, -1)) * (HEAD_SIZE**-0.5) + extra_add
     attn_score = torch.softmax(attn_score, dim=-1)
 
     feat = (attn_score @ v).transpose(1, 2).reshape(BATCHSIZE, -1, HIDDEN_SIZE)
     return feat
 
 
-def Conv_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Conv_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """The convolution operator consumes an input tensor and a filter, and
     computes the output.
 
@@ -267,35 +297,51 @@ def Conv_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=2, max_num_of_input=3)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
-    
-    groups    = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='group', default=1)
-    onnx_pads = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='pads', default=0)
-    dilation  = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='dilations', default=1)
-    stride    = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='strides', default=1)
-    auto_pad  = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='auto_pad', default='NOTSET')
 
-    x, w = values[: 2]
+    groups = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="group", default=1)
+    onnx_pads = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="pads", default=0)
+    dilation = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="dilations", default=1)
+    stride = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="strides", default=1)
+    auto_pad = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="auto_pad", default="NOTSET"
+    )
+
+    x, w = values[:2]
     b = values[2] if len(values) > 2 else None
 
     ndim = w.ndim
 
     # conv - 1d
     if ndim in {2, 3}:
-        if auto_pad != 'NOTSET': raise NotImplementedError(f'auto_pad must be "NOTSET" with 1-d conv {op.name}')
-        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode='1d')
+        if auto_pad != "NOTSET":
+            raise NotImplementedError(
+                f'auto_pad must be "NOTSET" with 1-d conv {op.name}'
+            )
+        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode="1d")
         if isinstance(torch_pads, list) and len(torch_pads) == 2:
             x = F.pad(x, torch_pads)
             torch_pads = 0
         output = F.conv1d(
-            input=x, weight=w, bias=b, groups=groups, 
-            padding=torch_pads, dilation=dilation, stride=stride)
+            input=x,
+            weight=w,
+            bias=b,
+            groups=groups,
+            padding=torch_pads,
+            dilation=dilation,
+            stride=stride,
+        )
 
     # conv - 2d
     elif ndim == 4:
         process_attribute(op.attributes, values[0].shape[2:], values[1].shape[2:])
         # onnx pads format[top, left, bottom, right] to torch pads format[left, right, top, bottom]
         if isinstance(onnx_pads, list) and len(onnx_pads) == 4:
-            p_left, p_right, p_top, p_bottom = onnx_pads[1], onnx_pads[3], onnx_pads[0], onnx_pads[2]
+            p_left, p_right, p_top, p_bottom = (
+                onnx_pads[1],
+                onnx_pads[3],
+                onnx_pads[0],
+                onnx_pads[2],
+            )
             # torch does not support padding contains 4 value, there is a fix of it.
             if p_left == p_right and p_top == p_bottom:
                 onnx_pads = [p_top, p_left]
@@ -304,26 +350,45 @@ def Conv_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
                 onnx_pads = 0
 
         output = F.conv2d(
-            input=x, weight=w, bias=b, groups=groups, padding=onnx_pads,
-            dilation=dilation, stride=stride)
+            input=x,
+            weight=w,
+            bias=b,
+            groups=groups,
+            padding=onnx_pads,
+            dilation=dilation,
+            stride=stride,
+        )
 
     # conv - 3d
     elif ndim == 5:
-        if auto_pad != 'NOTSET': raise NotImplementedError(f'auto_pad must be "NOTSET" with 3-d conv {op.name}')
-        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode='3d')
+        if auto_pad != "NOTSET":
+            raise NotImplementedError(
+                f'auto_pad must be "NOTSET" with 3-d conv {op.name}'
+            )
+        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode="3d")
         if isinstance(torch_pads, list) and len(torch_pads) == 6:
             x = F.pad(x, torch_pads)
             torch_pads = 0
         output = F.conv3d(
-            input=x, weight=w, bias=b, groups=groups, 
-            padding=torch_pads, dilation=dilation, stride=stride)
-    
+            input=x,
+            weight=w,
+            bias=b,
+            groups=groups,
+            padding=torch_pads,
+            dilation=dilation,
+            stride=stride,
+        )
+
     else:
-        raise ValueError(f'Operation {op.name} is invalid, {ndim}-d input is not supported.')
+        raise ValueError(
+            f"Operation {op.name} is invalid, {ndim}-d input is not supported."
+        )
     return output
 
 
-def ConvTranspose_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def ConvTranspose_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """The convolution transpose operator consumes an input tensor and a
     filter, and computes the output.
 
@@ -422,13 +487,17 @@ def ConvTranspose_forward(op: Operation, values: List[torch.Tensor], ctx: TorchB
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=2, max_num_of_input=3)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
-    
-    process_attribute(op.attributes, values[0].shape[2:], values[1].shape[2:], 'ConvTranspose')
-    groups    = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='group', default=1)
-    onnx_pads = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='pads', default=0)
-    dilation  = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='dilations', default=1)
-    stride    = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='strides', default=1)
-    output_padding = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='output_padding', default=0)
+
+    process_attribute(
+        op.attributes, values[0].shape[2:], values[1].shape[2:], "ConvTranspose"
+    )
+    groups = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="group", default=1)
+    onnx_pads = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="pads", default=0)
+    dilation = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="dilations", default=1)
+    stride = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="strides", default=1)
+    output_padding = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="output_padding", default=0
+    )
 
     x, w = values[:2]
     b = values[2] if len(values) > 2 else None
@@ -436,122 +505,204 @@ def ConvTranspose_forward(op: Operation, values: List[torch.Tensor], ctx: TorchB
 
     # 2d conv transpose
     if ndim == 4:
-        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode='2d')
+        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode="2d")
         if isinstance(torch_pads, list) and len(torch_pads) == 2:
             output = F.conv_transpose2d(
-                input=x, weight=w, bias=b, groups=groups, padding=torch_pads,
-                dilation=dilation, stride=stride, output_padding=output_padding)
+                input=x,
+                weight=w,
+                bias=b,
+                groups=groups,
+                padding=torch_pads,
+                dilation=dilation,
+                stride=stride,
+                output_padding=output_padding,
+            )
         else:
             output = F.conv_transpose2d(
-                input=x, weight=w, bias=b, groups=groups, padding=0,
-                dilation=dilation, stride=stride, output_padding=output_padding)
+                input=x,
+                weight=w,
+                bias=b,
+                groups=groups,
+                padding=0,
+                dilation=dilation,
+                stride=stride,
+                output_padding=output_padding,
+            )
 
             p1, p2, p3, p4 = torch_pads
             _, _, h, w = output.shape
-            output = output[:, :, 0 + p1: h - p2, 0 + p3: w - p4]
+            output = output[:, :, 0 + p1 : h - p2, 0 + p3 : w - p4]
 
     # 1d conv transpose
     elif ndim in {2, 3}:
-        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode='1d')
+        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode="1d")
         if isinstance(torch_pads, list) and len(torch_pads) == 1:
             output = F.conv_transpose1d(
-                input=x, weight=w, bias=b, groups=groups, padding=torch_pads,
-                dilation=dilation, stride=stride, output_padding=output_padding)
+                input=x,
+                weight=w,
+                bias=b,
+                groups=groups,
+                padding=torch_pads,
+                dilation=dilation,
+                stride=stride,
+                output_padding=output_padding,
+            )
         else:
             output = F.conv_transpose1d(
-                input=x, weight=w, bias=b, groups=groups, padding=0,
-                dilation=dilation, stride=stride, output_padding=output_padding)
+                input=x,
+                weight=w,
+                bias=b,
+                groups=groups,
+                padding=0,
+                dilation=dilation,
+                stride=stride,
+                output_padding=output_padding,
+            )
 
             p1, p2 = torch_pads
             _, _, h = output.shape
-            output = output[:, :, 0 + p1: h - p2]
+            output = output[:, :, 0 + p1 : h - p2]
 
     # 3d conv transpose
     elif ndim == 5:
-        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode='3d')
+        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode="3d")
         if isinstance(torch_pads, list) and len(torch_pads) == 3:
             output = F.conv_transpose3d(
-                input=x, weight=w, bias=b, groups=groups, padding=torch_pads,
-                dilation=dilation, stride=stride, output_padding=output_padding)
+                input=x,
+                weight=w,
+                bias=b,
+                groups=groups,
+                padding=torch_pads,
+                dilation=dilation,
+                stride=stride,
+                output_padding=output_padding,
+            )
         else:
             output = F.conv_transpose3d(
-                input=x, weight=w, bias=b, groups=groups, padding=0,
-                dilation=dilation, stride=stride, output_padding=output_padding)
+                input=x,
+                weight=w,
+                bias=b,
+                groups=groups,
+                padding=0,
+                dilation=dilation,
+                stride=stride,
+                output_padding=output_padding,
+            )
 
             p1, p2, p3, p4, p5, p6 = torch_pads
             _, _, d, h, w = output.shape
-            output = output[:, :, 0 + p1: d - p2, 0 + p3: h - p4, 0 + p5: w - p6]
+            output = output[:, :, 0 + p1 : d - p2, 0 + p3 : h - p4, 0 + p5 : w - p6]
     else:
-        raise ValueError(f'Operation {op.name} is invalid, {ndim}-d input is not supported.')
+        raise ValueError(
+            f"Operation {op.name} is invalid, {ndim}-d input is not supported."
+        )
     return output
 
 
-def MaxPool2d_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def MaxPool2d_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
     process_attribute(op.attributes, values[0].shape[2:])
 
     [x] = values
-    onnx_pads   = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='pads', default=0)
-    dilation  = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='dilations', default=1)
-    stride    = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='strides', default=None)
-    ceil_mode = bool(GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='ceil_mode', default=False))
-    if op.type == 'GlobalMaxPool': kernel_size = x.size()[2:]
-    else: kernel_size = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='kernel_shape', compulsive=True)
+    onnx_pads = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="pads", default=0)
+    dilation = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="dilations", default=1)
+    stride = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="strides", default=None)
+    ceil_mode = bool(
+        GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="ceil_mode", default=False)
+    )
+    if op.type == "GlobalMaxPool":
+        kernel_size = x.size()[2:]
+    else:
+        kernel_size = GET_ATTRIBUTE_FROM_OPERATION(
+            op=op, attribute="kernel_shape", compulsive=True
+        )
 
     ndim = x.ndim
     # pool - 3d
     if ndim == 5:
-        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode='3d')
+        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode="3d")
         if isinstance(torch_pads, list) and len(torch_pads) != 3:
             x = F.pad(x, torch_pads)
             torch_pads = 0
         output = F.max_pool3d(
-            x, kernel_size=kernel_size, padding=torch_pads,
-            dilation=dilation, stride=stride, ceil_mode=ceil_mode)
+            x,
+            kernel_size=kernel_size,
+            padding=torch_pads,
+            dilation=dilation,
+            stride=stride,
+            ceil_mode=ceil_mode,
+        )
 
     elif ndim == 4:
         # onnx pads format[top, left, bottom, right] to torch pads format[left, right, top, bottom]
         if isinstance(onnx_pads, list) and len(onnx_pads) == 4:
-            p_left, p_right, p_top, p_bottom = onnx_pads[1], onnx_pads[3], onnx_pads[0], onnx_pads[2]
+            p_left, p_right, p_top, p_bottom = (
+                onnx_pads[1],
+                onnx_pads[3],
+                onnx_pads[0],
+                onnx_pads[2],
+            )
             # torch does not support padding contains 4 value, there is a fix of it.
             if p_left == p_right and p_top == p_bottom:
                 onnx_pads = [p_top, p_left]
             else:
-                x = F.pad(x, pad=convert_onnx_pads_to_torch(onnx_pads), value=float("-inf"))
+                x = F.pad(
+                    x, pad=convert_onnx_pads_to_torch(onnx_pads), value=float("-inf")
+                )
                 onnx_pads = 0
 
         output = F.max_pool2d(
-            x, kernel_size=kernel_size,
-            padding=onnx_pads, dilation=dilation,
-            stride=stride, ceil_mode=ceil_mode)
+            x,
+            kernel_size=kernel_size,
+            padding=onnx_pads,
+            dilation=dilation,
+            stride=stride,
+            ceil_mode=ceil_mode,
+        )
 
     elif ndim in {2, 3}:
-        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode='1d')
+        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode="1d")
         if isinstance(torch_pads, list) and len(torch_pads) != 1:
             x = F.pad(x, torch_pads)
             torch_pads = 0
         output = F.max_pool1d(
-            x, kernel_size=kernel_size, padding=torch_pads,
-            dilation=dilation, stride=stride, ceil_mode=ceil_mode)
+            x,
+            kernel_size=kernel_size,
+            padding=torch_pads,
+            dilation=dilation,
+            stride=stride,
+            ceil_mode=ceil_mode,
+        )
     else:
-        raise ValueError(f'Operation {op.name} is invalid, {ndim}-d input is not supported.')
+        raise ValueError(
+            f"Operation {op.name} is invalid, {ndim}-d input is not supported."
+        )
     return output
 
 
-def BatchNormalization_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def BatchNormalization_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=5, max_num_of_input=5)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     input_data, weight, bias, running_mean, running_var = values
 
     # Default momentum in pytorch is 0.1 while onnx is 0.9, caffe is 0.999
-    op_attr = {'eps': op.attributes.get(
-        'epsilon', 1e-05), 'momentum': 1 - op.attributes.get('momentum', 0.9)}
-    output = F.batch_norm(input_data, running_mean,
-                          running_var, weight=weight, bias=bias, **op_attr)
+    op_attr = {
+        "eps": op.attributes.get("epsilon", 1e-05),
+        "momentum": 1 - op.attributes.get("momentum", 0.9),
+    }
+    output = F.batch_norm(
+        input_data, running_mean, running_var, weight=weight, bias=bias, **op_attr
+    )
     return output
 
 
-def Mul_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Mul_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Performs element-wise binary multiplication (with Numpy-style
     broadcasting support).
 
@@ -583,7 +734,9 @@ def Mul_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     return multiplicand * multiplier
 
 
-def MultiHeadAttention_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def MultiHeadAttention_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Perform MultiHeadAttetion opr forward.
 
     Args:
@@ -599,27 +752,27 @@ def MultiHeadAttention_forward(op: Operation, values: List[torch.Tensor], ctx: T
         list: opr output and internal result for quantization.
     """
     if len(values) != 11:
-        raise NotImplementedError('Not implement simplified MultiHeadAttention')
+        raise NotImplementedError("Not implement simplified MultiHeadAttention")
 
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
-    q_in,k_in,v_in,q_w,q_b,k_w,k_b,v_w,v_b,o_w,o_b = values
-    embed_dim = op.attributes.get('embed_dim')
-    num_heads = op.attributes.get('num_heads')
+    q_in, k_in, v_in, q_w, q_b, k_w, k_b, v_w, v_b, o_w, o_b = values
+    embed_dim = op.attributes.get("embed_dim")
+    num_heads = op.attributes.get("num_heads")
 
     if embed_dim is None or num_heads is None:
-        raise ValueError('Cannot fetch embed_dim or num_heads')
+        raise ValueError("Cannot fetch embed_dim or num_heads")
 
     # setup parameters
     batch_size = q_in.shape[0]
     head_dim = embed_dim // num_heads
-    scale = head_dim ** -0.5
+    scale = head_dim**-0.5
 
     xq = F.linear(q_in, q_w, q_b)
     xk = F.linear(k_in, k_w, k_b)
     xv = F.linear(v_in, v_w, v_b)
-    
+
     B, N, _ = xq.shape
-    
+
     q = xq.reshape(B, N, num_heads, head_dim).permute(0, 2, 1, 3)
     k = xk.reshape(B, N, num_heads, head_dim).permute(0, 2, 1, 3)
     v = xv.reshape(B, N, num_heads, head_dim).permute(0, 2, 1, 3)
@@ -629,11 +782,13 @@ def MultiHeadAttention_forward(op: Operation, values: List[torch.Tensor], ctx: T
 
     feat = (attn @ v).transpose(1, 2).reshape(batch_size, -1, embed_dim)
     out = F.linear(feat, o_w, o_b)
-    
+
     return out
 
 
-def Add_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Add_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Performs element-wise binary addition (with Numpy-style broadcasting
     support).
 
@@ -665,51 +820,67 @@ def Add_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     return a + b
 
 
-def And_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def And_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=2, max_num_of_input=2)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     a, b = values
     return a & b
 
 
-def Eltwise_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Eltwise_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
-    if op.type == 'Add':
+    if op.type == "Add":
         assert len(values) == 2
         output = torch.add(*values).float()
-    elif op.type == 'Sub':
+    elif op.type == "Sub":
         assert len(values) == 2
         output = torch.sub(*values).float()
-    elif op.type == 'Mul':
+    elif op.type == "Mul":
         assert len(values) == 2
         output = torch.mul(*values).float()
-    elif op.type == 'Div':
+    elif op.type == "Div":
         assert len(values) == 2
         version = torch.__version__
-        if version < '1.5.0' or version >= '1.7.0':
-            if (values[0].dtype in [torch.int32, torch.int64] and 
-                values[1].dtype in [torch.int32, torch.int64]):
+        if version < "1.5.0" or version >= "1.7.0":
+            if values[0].dtype in [torch.int32, torch.int64] and values[1].dtype in [
+                torch.int32,
+                torch.int64,
+            ]:
                 if values[0].dtype == torch.int64 or values[1].dtype[1] == torch.int64:
                     output = torch.floor_divide(*values).long()
-                else: output = torch.floor_divide(*values).int()
+                else:
+                    output = torch.floor_divide(*values).int()
             else:
                 output = torch.div(*values)
         else:
-            if values[0].dtype in [torch.uint8, torch.int8, torch.int16, torch.int32, torch.int64]:
+            if values[0].dtype in [
+                torch.uint8,
+                torch.int8,
+                torch.int16,
+                torch.int32,
+                torch.int64,
+            ]:
                 output = torch.floor_divide(*values).int()
-            else: output = torch.div(*values)
-    elif op.type == 'Max':
+            else:
+                output = torch.div(*values)
+    elif op.type == "Max":
         output = torch.max(*values)
-    elif op.type == 'Min':
+    elif op.type == "Min":
         output = torch.min(*values)
     else:
-        logger.warning('Not Eltwise op, return input as output')
+        logger.warning("Not Eltwise op, return input as output")
         output = values
     return output
 
 
 # TODO: shape might contain 0, needs better solution
-def Reshape_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Reshape_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Reshape the input tensor similar to numpy.reshape. First input is the
     data tensor, second input is a shape tensor which specifies the output
     shape. It outputs the reshaped tensor.
@@ -755,37 +926,57 @@ def Reshape_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackend
 
     # If the element in shape is a tensor, convert it to a value, for example,
     # convert [1, tensor(-1)] to [1, -1]
-    shape = [shape[i].item() if hasattr(shape[i], 'item') else shape[i] for i in range(len(shape))]
+    shape = [
+        shape[i].item() if hasattr(shape[i], "item") else shape[i]
+        for i in range(len(shape))
+    ]
     return data.reshape(shape)
 
 
-def AveragePool_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def AveragePool_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
     process_attribute(op.attributes, values[0].shape[2:])
 
     [x] = values
-    onnx_pads    = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='pads', default=0)
-    stride       = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='strides', default=None)
-    ceil_mode    = bool(GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='ceil_mode', default=False))
-    if op.type   == 'GlobalAveragePool': kernel_size = x.size()[2:]
-    else: kernel_size = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='kernel_shape', compulsive=True)
+    onnx_pads = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="pads", default=0)
+    stride = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="strides", default=None)
+    ceil_mode = bool(
+        GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="ceil_mode", default=False)
+    )
+    if op.type == "GlobalAveragePool":
+        kernel_size = x.size()[2:]
+    else:
+        kernel_size = GET_ATTRIBUTE_FROM_OPERATION(
+            op=op, attribute="kernel_shape", compulsive=True
+        )
 
     ndim = x.ndim
     # pool 1d
     if ndim == 3:
-        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode='1d')
+        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode="1d")
         if isinstance(torch_pads, list) and len(torch_pads) != 1:
             x = F.pad(x, torch_pads)
             torch_pads = 0
         output = F.avg_pool1d(
-            x, kernel_size=kernel_size, padding=torch_pads,
-            stride=stride, ceil_mode=ceil_mode)
+            x,
+            kernel_size=kernel_size,
+            padding=torch_pads,
+            stride=stride,
+            ceil_mode=ceil_mode,
+        )
         return output
     # pool 2d
     if ndim == 4:
         # onnx pads format[top, left, bottom, right] to torch pads format[left, right, top, bottom]
         if isinstance(onnx_pads, list) and len(onnx_pads) == 4:
-            p_left, p_right, p_top, p_bottom = onnx_pads[1], onnx_pads[3], onnx_pads[0], onnx_pads[2]
+            p_left, p_right, p_top, p_bottom = (
+                onnx_pads[1],
+                onnx_pads[3],
+                onnx_pads[0],
+                onnx_pads[2],
+            )
             # torch does not support padding contains 4 value, there is a fix of it.
             if p_left == p_right and p_top == p_bottom:
                 onnx_pads = [p_top, p_left]
@@ -794,40 +985,56 @@ def AveragePool_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBac
                 onnx_pads = 0
 
         output = F.avg_pool2d(
-            x, kernel_size=kernel_size,
-            padding=onnx_pads, stride=stride, ceil_mode=ceil_mode)
+            x,
+            kernel_size=kernel_size,
+            padding=onnx_pads,
+            stride=stride,
+            ceil_mode=ceil_mode,
+        )
         return output
     # pool 3d
     elif ndim == 5:
-        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode='3d')
+        torch_pads = convert_onnx_pads_to_torch(onnx_pads=onnx_pads, mode="3d")
         if isinstance(torch_pads, list) and len(torch_pads) != 3:
             x = F.pad(x, torch_pads)
             torch_pads = 0
         output = F.avg_pool3d(
-            x, kernel_size=kernel_size, padding=torch_pads,
-            stride=stride, ceil_mode=ceil_mode)
+            x,
+            kernel_size=kernel_size,
+            padding=torch_pads,
+            stride=stride,
+            ceil_mode=ceil_mode,
+        )
         return output
     else:
-        raise ValueError(f'Operation {op.name} is invalid, {ndim}-d input is not supported.')
+        raise ValueError(
+            f"Operation {op.name} is invalid, {ndim}-d input is not supported."
+        )
 
     return output
 
 
-def AdaptiveAvgPool2d_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def AdaptiveAvgPool2d_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     input_value, output_size = values
     output = F.adaptive_avg_pool2d(input_value, output_size)
     return output
 
 
-def ArgMax_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def ArgMax_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     [input_value] = values
-    dim = op.attributes.get('axis', None)
-    keepdim = bool(op.attributes.get('keepdims', 1))
+    dim = op.attributes.get("axis", None)
+    keepdim = bool(op.attributes.get("keepdims", 1))
     output = torch.argmax(input_value, dim=dim, keepdim=keepdim)
     return output
 
 
-def Transpose_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Transpose_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Transpose the input tensor similar to numpy.transpose. For example, when
     perm=(1, 0, 2), given an input tensor of shape (1, 2, 3), the output shape
     will be (2, 1, 3).
@@ -853,13 +1060,15 @@ def Transpose_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacke
         torch.Tensor: [description]
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
-    perm = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='perm', compulsive=True)
+    perm = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="perm", compulsive=True)
     [data] = values
     output = data.permute(perm)
     return output
 
 
-def Concat_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Concat_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Concatenate a list of tensors into a single tensor. All input tensors
     must have the same shape, except for the dimension size of the axis to
     concatenate on.
@@ -887,7 +1096,7 @@ def Concat_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
         torch.Tensor: [description]
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1)
-    axis = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='axis', compulsive=True)
+    axis = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="axis", compulsive=True)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
 
     # zero-dimensional tensor cannot be concatenated
@@ -901,7 +1110,9 @@ def Concat_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
     return torch.cat(concat_view, axis=axis)
 
 
-def Constant_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Constant_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """A constant tensor. Exactly one of the two attributes, either value or
     sparse_value, must be specified.
 
@@ -928,10 +1139,12 @@ def Constant_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacken
         torch.Tensor: [description]
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=0, max_num_of_input=0)
-    return op.attributes['value']
+    return op.attributes["value"]
 
 
-def Tile_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Tile_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Constructs a tensor by tiling a given tensor. This is the same as
     function tile in Numpy, but no broadcast.
 
@@ -967,21 +1180,24 @@ def Tile_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
     # the tiles parameter is a scalar in caffe
 
     # caffe op attributes
-    axis = op.attributes.get('axis', None)
-    tiles = op.attributes.get('tiles', None)
+    axis = op.attributes.get("axis", None)
+    tiles = op.attributes.get("tiles", None)
 
     if axis is not None:
         repeats = [1 for _ in range(input.ndim)]
         repeats[axis] = tiles
     else:
         repeats = convert_any_to_python_primary_type(values[-1])
-        if not isinstance(repeats, list): repeats = [repeats]
+        if not isinstance(repeats, list):
+            repeats = [repeats]
     assert input.ndim == len(repeats)
     output = input.repeat(tuple(repeats))
     return output
 
 
-def Squeeze_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Squeeze_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Remove single-dimensional entries from the shape of a tensor. Takes an
     input axes with a list of axes to squeeze. If axes is not provided, all the
     single dimensions will be removed from the shape. If an axis is selected
@@ -1009,34 +1225,50 @@ def Squeeze_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackend
     # we acquire axes in different ways according to opset
     # only opset=11 or opset=13 supported
     if op.opset.onnx_opset_version() >= 13:
-        ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=2)
+        ASSERT_NUM_OF_INPUT(
+            op=op, values=values, min_num_of_input=1, max_num_of_input=2
+        )
         squeezing_tensor = values[0]
-        axes = [axis for axis in range(squeezing_tensor.ndim) if squeezing_tensor.shape[axis] == 1]
+        axes = [
+            axis
+            for axis in range(squeezing_tensor.ndim)
+            if squeezing_tensor.shape[axis] == 1
+        ]
 
         if len(values) > 1:
             axes = values[1]
             axes = axes.tolist()
     else:
-        ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
-        [squeezing_tensor], axes = values, GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='axes', compulsive=False, default=None)
-    
+        ASSERT_NUM_OF_INPUT(
+            op=op, values=values, min_num_of_input=1, max_num_of_input=1
+        )
+        [squeezing_tensor], axes = values, GET_ATTRIBUTE_FROM_OPERATION(
+            op=op, attribute="axes", compulsive=False, default=None
+        )
+
     # common part
     if axes is None:
         axes = []
         shape = squeezing_tensor.shape
         for dim, s in enumerate(shape):
-            if s == 1: axes.append(dim)
+            if s == 1:
+                axes.append(dim)
     if isinstance(axes, list):
         for squeezing_dim in sorted(axes, reverse=True):
             squeezing_tensor = torch.squeeze(squeezing_tensor, squeezing_dim)
     elif isinstance(axes, int):
         squeezing_tensor = torch.squeeze(squeezing_tensor, axes)
-    else: raise TypeError(f'Parameter axes of operation {op.name} misunderstood, '
-                          f'expect int value of list of int, while {type(axes)} was given.')
+    else:
+        raise TypeError(
+            f"Parameter axes of operation {op.name} misunderstood, "
+            f"expect int value of list of int, while {type(axes)} was given."
+        )
     return squeezing_tensor
 
 
-def Unsqueeze_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Unsqueeze_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Insert single-dimensional entries to the shape of an input tensor
     (data).
 
@@ -1079,32 +1311,41 @@ def Unsqueeze_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacke
         torch.Tensor: [description]
     """
     if op.opset.onnx_opset_version() >= 13:
-        ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=2, max_num_of_input=2)
+        ASSERT_NUM_OF_INPUT(
+            op=op, values=values, min_num_of_input=2, max_num_of_input=2
+        )
         unsqueezing_tensor, axes = values
         axes = axes.tolist()
     else:
-        ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
+        ASSERT_NUM_OF_INPUT(
+            op=op, values=values, min_num_of_input=1, max_num_of_input=1
+        )
         [unsqueezing_tensor] = values
-        axes = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='axes', compulsive=True)
+        axes = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="axes", compulsive=True)
 
     if isinstance(axes, list):
         for squeezing_dim in sorted(axes):
             unsqueezing_tensor = torch.unsqueeze(unsqueezing_tensor, squeezing_dim)
     elif isinstance(axes, int):
         unsqueezing_tensor = torch.unsqueeze(unsqueezing_tensor, axes)
-    else: raise TypeError(f'Parameter axes of operation {op.name} misunderstood, '
-                          f'expect int value of list of int, while {type(axes)} was given.')
+    else:
+        raise TypeError(
+            f"Parameter axes of operation {op.name} misunderstood, "
+            f"expect int value of list of int, while {type(axes)} was given."
+        )
     return unsqueezing_tensor
 
 
-def Gather_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
-    """Given data tensor of rank r >= 1, and indices tensor of rank q, 
-    gather entries of the axis dimension of data (by default outer-most one as axis=0) indexed by indices, 
+def Gather_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
+    """Given data tensor of rank r >= 1, and indices tensor of rank q,
+    gather entries of the axis dimension of data (by default outer-most one as axis=0) indexed by indices,
     and concatenates them in an output tensor of rank q + (r - 1).
 
     axis = 0 :
 
-    Let k = indices[i_{0}, ..., i_{q-1}] 
+    Let k = indices[i_{0}, ..., i_{q-1}]
         Then output[i_{0}, ..., i_{q-1}, j_{0}, ..., j_{r-2}] = input[k , j_{0}, ..., j_{r-2}]
 
         data = [
@@ -1126,10 +1367,10 @@ def Gather_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
                 [4.5, 5.7],
             ],
         ]
-    
+
     axis = 1 :
 
-    Let k = indices[i_{0}, ..., i_{q-1}] 
+    Let k = indices[i_{0}, ..., i_{q-1}]
         Then output[j_{0}, i_{0}, ..., i_{q-1}, j_{1}, ..., j_{r-2}] = input[j_{0}, k, j_{1}, ..., j_{r-2}]
 
         data = [
@@ -1146,7 +1387,7 @@ def Gather_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
                 [[2.3, 3.9]],
                 [[4.5, 5.9]],
         ]
-    
+
     Version
         This version of the operator has been available since version 13 of the default ONNX operator set.
 
@@ -1154,19 +1395,19 @@ def Gather_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
 
     Attributes
         axis : int (default is 0)
-            Which axis to gather on. Negative value means counting dimensions from the back. 
+            Which axis to gather on. Negative value means counting dimensions from the back.
             Accepted range is [-r, r-1] where r = rank(data).
-    
+
     Inputs
         data (differentiable) : T
             Tensor of rank r >= 1.
-    
+
         indices (non-differentiable) : Tind
-            Tensor of int32/int64 indices, of any rank q. All index values are expected to be 
-            within bounds [-s, s-1] along axis of size s. 
-            
+            Tensor of int32/int64 indices, of any rank q. All index values are expected to be
+            within bounds [-s, s-1] along axis of size s.
+
             It is an error if any of the index values are out of bounds.
-    
+
     Outputs
         output (differentiable) : T
             Tensor of rank q + (r - 1).
@@ -1175,26 +1416,30 @@ def Gather_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
     input_data, indices = values
 
     indices = indices.long()
-    axis = op.attributes.get('axis', 0)
-    if op.type == 'Gather':
-        array_idx = [indices if axis == i else slice(
-            dim) for i, dim in enumerate(input_data.shape)]
+    axis = op.attributes.get("axis", 0)
+    if op.type == "Gather":
+        array_idx = [
+            indices if axis == i else slice(dim)
+            for i, dim in enumerate(input_data.shape)
+        ]
         output = input_data[array_idx]
-    elif op.type == 'GatherElements':
+    elif op.type == "GatherElements":
         output = torch.gather(input_data, axis, indices)
     else:
-        logger.warning('Not Gather op, return input as output')
+        logger.warning("Not Gather op, return input as output")
         output = values
     return output
 
 
-def GatherND_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def GatherND_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     # y[i_1, ..., i_b, j_1, ..., j_n, k_1, ..., k_m] =
     #        x[i_1, ...,i_b, *idx[i_1, ..., i_b, j_1, ...,j_n, :], k_1,...,k_m]
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     input_data, indices = values
 
-    batch_dims = op.attributes.get('batch_dims', 0)
+    batch_dims = op.attributes.get("batch_dims", 0)
     data_rank = len(input_data.shape)
     assert indices.shape[-1] <= data_rank
 
@@ -1205,22 +1450,29 @@ def GatherND_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacken
 
     shape_i = indices.shape[:num_i]
     shape_j = indices.shape[num_i:-1]
-    shape_k = input_data.shape[num_i + num_idx:]
-    shape_idx = input_data.shape[num_i:num_i + num_idx]
+    shape_k = input_data.shape[num_i + num_idx :]
+    shape_idx = input_data.shape[num_i : num_i + num_idx]
 
     # indices reshape
     reshaped_indices = indices.reshape(
-        *shape_i, -1, num_idx)  # shape [i_1, ..., i_b, J, 1]
+        *shape_i, -1, num_idx
+    )  # shape [i_1, ..., i_b, J, 1]
     # indices tensordot, expand the last dim in indices
     strides = torch.tensor(
-        [reduce(operator.mul, shape_idx[i + 1:], 1) for i in range(num_idx)], device=input_data.device,
-        dtype=torch.float)
+        [reduce(operator.mul, shape_idx[i + 1 :], 1) for i in range(num_idx)],
+        device=input_data.device,
+        dtype=torch.float,
+    )
     merged_indices = torch.tensordot(
-        reshaped_indices.float(), strides, 1)  # shape [i_1, ..., i_b, J]
+        reshaped_indices.float(), strides, 1
+    )  # shape [i_1, ..., i_b, J]
 
     # indices expand
-    expanded_indices = merged_indices.reshape(*merged_indices.shape, *([1] * num_k)).expand(
-        *merged_indices.shape, *shape_k).long()
+    expanded_indices = (
+        merged_indices.reshape(*merged_indices.shape, *([1] * num_k))
+        .expand(*merged_indices.shape, *shape_k)
+        .long()
+    )
 
     # reshape input
     reshaped_input = input_data.reshape(*shape_i, -1, *shape_k)
@@ -1231,13 +1483,17 @@ def GatherND_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacken
     return reshaped_output
 
 
-def Gelu_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Gelu_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
     [input_value] = values
     return F.gelu(input_value)
 
 
-def Greater_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Greater_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     input_a, input_b = values
     if input_a.dim() >= input_b.dim() or input_a.shape > input_b.shape:
@@ -1247,7 +1503,9 @@ def Greater_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackend
     return output
 
 
-def Less_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Less_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     input_a, input_b = values
     if input_a.dim() >= input_b.dim() or input_a.shape > input_b.shape:
@@ -1257,14 +1515,18 @@ def Less_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
     return output
 
 
-def Cast_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Cast_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     [input_value] = values
-    new_data_type = DataType.to_torch(op.attributes['to'])
+    new_data_type = DataType.to_torch(op.attributes["to"])
     output = input_value.to(dtype=new_data_type)
     return output
 
 
-def ConstantOfShape_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def ConstantOfShape_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Generate a tensor with given value and shape.
 
     Attributes
@@ -1290,47 +1552,59 @@ def ConstantOfShape_forward(op: Operation, values: List[torch.Tensor], ctx: Torc
     Returns:
         torch.Tensor: [description]
     """
-    value = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='value', compulsive=False, default=0.0)
+    value = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="value", compulsive=False, default=0.0
+    )
     [shape], fill_value = values, convert_any_to_python_primary_type(value)
-    output = torch.Tensor().new_full(
-        size=shape.tolist(), fill_value=fill_value)
-    if isinstance(fill_value, int): output = output.long()
-    elif isinstance(fill_value, float): output = output.float()
-    else: raise TypeError(f'Can not parse value type{type(value)}.')
+    output = torch.Tensor().new_full(size=shape.tolist(), fill_value=fill_value)
+    if isinstance(fill_value, int):
+        output = output.long()
+    elif isinstance(fill_value, float):
+        output = output.float()
+    else:
+        raise TypeError(f"Can not parse value type{type(value)}.")
     return output.to(ctx.executing_device)
 
 
-def UnaryEltwise_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def UnaryEltwise_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     [input_value] = values
-    if op.type == 'Exp':
+    if op.type == "Exp":
         output = torch.exp(input_value)
-    elif op.type == 'Sigmoid':
+    elif op.type == "Sigmoid":
         output = torch.sigmoid(input_value)
-    elif op.type == 'Relu':
+    elif op.type == "Relu":
         output = F.relu(input_value)
     else:
-        logger.warning('Not UnaryEltwise op, return input as output')
+        logger.warning("Not UnaryEltwise op, return input as output")
         output = input_value
     return output
 
 
-def NonZero_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def NonZero_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     [input_value] = values
     output = torch.nonzero(input_value, as_tuple=True)
     output = torch.stack(output)
     return output
 
 
-def Clip_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Clip_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     if len(values) == 1:
-        values.append(op.attributes.get('min', float('-inf')))
-        values.append(op.attributes.get('max', float('+inf')))
+        values.append(op.attributes.get("min", float("-inf")))
+        values.append(op.attributes.get("max", float("+inf")))
     output = torch.clamp(*values)
     return output
 
 
-def Slice_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Slice_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Produces a slice of the input tensor along multiple axes. Similar to
     numpy: https://docs.scipy.org/doc/numpy/reference/arrays.indexing.html
     Slices uses starts, ends, axes and steps inputs to specify the start and
@@ -1383,10 +1657,15 @@ def Slice_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCo
         [type]: [description]
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=3, max_num_of_input=5)
-    data, starts, ends = values[: 3]
-    axes  = values[3] if len(values) > 3 else torch.tensor([int(_) for idx, _ in enumerate(starts.tolist())])
+    data, starts, ends = values[:3]
+    axes = (
+        values[3]
+        if len(values) > 3
+        else torch.tensor([int(_) for idx, _ in enumerate(starts.tolist())])
+    )
     steps = values[4] if len(values) > 4 else torch.ones_like(starts)
-    if axes is not None: axes = axes.tolist()
+    if axes is not None:
+        axes = axes.tolist()
     starts, ends, steps = starts.tolist(), ends.tolist(), steps.tolist()
 
     slices, flip_dims = {}, []
@@ -1396,30 +1675,40 @@ def Slice_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCo
             start, end, step = -start - 1, -end - 1, -step
         slices[axis] = slice(int(start), int(end), int(step))
 
-    pos_axes_slices = list(slices.get(a, slice(None, None)) for a in range(max(axes) + 1))
-    neg_axes_slices = list(slices.get(a, slice(None, None)) for a in range(min(axes), 0))
-    if neg_axes_slices: neg_axes_slices = [Ellipsis] + neg_axes_slices
+    pos_axes_slices = list(
+        slices.get(a, slice(None, None)) for a in range(max(axes) + 1)
+    )
+    neg_axes_slices = list(
+        slices.get(a, slice(None, None)) for a in range(min(axes), 0)
+    )
+    if neg_axes_slices:
+        neg_axes_slices = [Ellipsis] + neg_axes_slices
 
-    if flip_dims: data = torch.flip(data, dims=flip_dims)
-    if pos_axes_slices: data = data[pos_axes_slices]
-    if neg_axes_slices: data = data[neg_axes_slices]
+    if flip_dims:
+        data = torch.flip(data, dims=flip_dims)
+    if pos_axes_slices:
+        data = data[pos_axes_slices]
+    if neg_axes_slices:
+        data = data[neg_axes_slices]
     return data
 
 
-def Interp_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Interp_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     input_data = values[0]
-    mode = op.attributes.get('mode', 'nearest')
+    mode = op.attributes.get("mode", "nearest")
     # onnx resize 'linear' model include N-linear interpolate for N-D tensor
-    linear_mode_map = {1: 'linear', 2: 'bilinear', 3: 'trilinear'}
+    linear_mode_map = {1: "linear", 2: "bilinear", 3: "trilinear"}
 
     # Caffe Interp preprocess
     # caffe resize by shrink_factor/zoom_factor
     input_shape = input_data.shape
-    align_corners = False if not op.attributes.get('align_corners') else True
-    zoom_factor = op.attributes.get('zoom_factor', 1)
-    shrink_factor = op.attributes.get('shrink_factor', 1)
-    pad_beg = op.attributes.get('pad_beg', 0)
-    pad_end = op.attributes.get('pad_end', 0)
+    align_corners = False if not op.attributes.get("align_corners") else True
+    zoom_factor = op.attributes.get("zoom_factor", 1)
+    shrink_factor = op.attributes.get("shrink_factor", 1)
+    pad_beg = op.attributes.get("pad_beg", 0)
+    pad_end = op.attributes.get("pad_end", 0)
 
     height_in_eff = input_shape[-2] + pad_beg + pad_end
     width_in_eff = input_shape[-1] + pad_beg + pad_end
@@ -1431,9 +1720,9 @@ def Interp_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
     if shrink_factor != 1:
         height_out = (height_in_eff - 1) // shrink_factor + 1
         width_out = (width_in_eff - 1) // shrink_factor + 1
-    if bool(op.attributes.get('height', None)):
-        height_out = op.attributes.get('height')
-        width_out = op.attributes.get('width')
+    if bool(op.attributes.get("height", None)):
+        height_out = op.attributes.get("height")
+        width_out = op.attributes.get("width")
     # PPL3 use second input define the shape
     if len(values) == 2:
         height_out, width_out = values[1].shape[-2:]
@@ -1442,25 +1731,29 @@ def Interp_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
     # the sizes in onnx is 4-D while in pytorch is 2-D
     # check the dim.0 & dim.1 is equal, then remain dim.2 and dim.3
     scales = None
-    assert (sizes[:2] == list(input_data.shape[:2]))
+    assert sizes[:2] == list(input_data.shape[:2])
     sizes = sizes[2:]
-    mode = linear_mode_map[len(sizes)] if mode == 'linear' else mode
+    mode = linear_mode_map[len(sizes)] if mode == "linear" else mode
 
     output = F.interpolate(input_data, sizes, scales, mode, align_corners)
     return output
 
 
-def Resize_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Resize_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     value = values[0]
     # Not used roi
     # roi  = input_value[1] if len(input_value) > 1 else None
     scale_factor = values[2].cpu() if len(values) > 2 else None
-    size = values[-1].cpu().tolist() if (len(values) == 4 and values[-1] != None) else None
-    mode = op.attributes.get('mode', 'nearest')
-    if mode == 'cubic':
-        mode = 'bicubic'
+    size = (
+        values[-1].cpu().tolist() if (len(values) == 4 and values[-1] != None) else None
+    )
+    mode = op.attributes.get("mode", "nearest")
+    if mode == "cubic":
+        mode = "bicubic"
     # onnx resize 'linear' model include N-linear interpolate for N-D tensor
-    linear_mode_map = {1: 'linear', 2: 'bilinear', 3: 'trilinear'}
+    linear_mode_map = {1: "linear", 2: "bilinear", 3: "trilinear"}
 
     # If 'size' is specified, then set scales to empty data (zero shape) in this operator's input list.
     if size is None or len(size) == 0:
@@ -1475,42 +1768,44 @@ def Resize_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
             elif len(scale_factor) == 4:
                 if scale_factor[:2] != [1, 1]:
                     raise NotImplementedError(
-                        'Can not resize your image with current op, '
-                        'cause 4-dimension resize is not implemented with pytorch.')
+                        "Can not resize your image with current op, "
+                        "cause 4-dimension resize is not implemented with pytorch."
+                    )
                 scale_factor = scale_factor[2:]
             else:
                 raise NotImplementedError(
-                    'Can not resize your image with current op, '
-                    f'cause {len(scale_factor)}-dimension resize is not implemented with pytorch.')
+                    "Can not resize your image with current op, "
+                    f"cause {len(scale_factor)}-dimension resize is not implemented with pytorch."
+                )
     else:
         # the sizes in onnx is 4-D while in pytorch is 2-D
         # check the dim.0 & dim.1 is equal, then remain dim.2 and dim.3
         scale_factor = None
-        assert (size[:2] == list(value.shape[:2]))
+        assert size[:2] == list(value.shape[:2])
         size = size[2:]
-        mode = linear_mode_map[len(size)] if mode == 'linear' else mode
+        mode = linear_mode_map[len(size)] if mode == "linear" else mode
 
-        if mode == 'cubic':
-            logger.warning('Only support bicubic now')
-            assert (len(size[2:]) == 2)
-            mode = 'bicubic'
+        if mode == "cubic":
+            logger.warning("Only support bicubic now")
+            assert len(size[2:]) == 2
+            mode = "bicubic"
 
     # PATCH 2022.04.22
     # ONNX DO NOT HAVE BILINEAR MODE, FOR 4D INPUT, WE OVERRIDE MODE TO BILINEAR
-    if len(value.shape) == 4 and mode == 'linear':
-        mode = 'bilinear'
+    if len(value.shape) == 4 and mode == "linear":
+        mode = "bilinear"
 
-    trans_mode = op.attributes.get(
-        'coordinate_transformation_mode', 'half_pixel')
-    if trans_mode == 'align_corners':
-        output = F.interpolate(value, size, scale_factor,
-                               mode, align_corners=True)
+    trans_mode = op.attributes.get("coordinate_transformation_mode", "half_pixel")
+    if trans_mode == "align_corners":
+        output = F.interpolate(value, size, scale_factor, mode, align_corners=True)
     else:
         output = F.interpolate(value, size, scale_factor, mode)
     return output
 
 
-def _NMS_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def _NMS_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Filter out boxes that have high intersection-over-union (IOU) overlap
     with previously selected boxes. Bounding boxes with score less than
     score_threshold are removed. Bounding box format is indicated by attribute
@@ -1563,12 +1858,13 @@ def _NMS_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
         values (List[torch.Tensor]): [description]
     """
     import mmcv.ops
+
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     boxes, scores = values[:2]
     max_output_boxes_per_class = values[2].item() if len(values) > 2 else 0
     iou_threshold = values[3].item() if len(values) > 3 else 0
     score_threshold = values[4].item() if len(values) > 4 else 0
-    center_point_box = op.attributes.get('center_point_box', 0)
+    center_point_box = op.attributes.get("center_point_box", 0)
 
     batch, num_classes = boxes.shape[0], scores.shape[1]
     output = []
@@ -1576,12 +1872,15 @@ def _NMS_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
         sub_boxes = boxes[i]
         sub_scores = scores[i]
         if center_point_box:
-            sub_boxes = torch.stack((
-                sub_boxes[:, 0] - sub_boxes[:, 2] / 2,
-                sub_boxes[:, 1] - sub_boxes[:, 3] / 2,
-                sub_boxes[:, 0] + sub_boxes[:, 2] / 2,
-                sub_boxes[:, 1] + sub_boxes[:, 3] / 2,
-            ), dim=1)
+            sub_boxes = torch.stack(
+                (
+                    sub_boxes[:, 0] - sub_boxes[:, 2] / 2,
+                    sub_boxes[:, 1] - sub_boxes[:, 3] / 2,
+                    sub_boxes[:, 0] + sub_boxes[:, 2] / 2,
+                    sub_boxes[:, 1] + sub_boxes[:, 3] / 2,
+                ),
+                dim=1,
+            )
         for j in range(num_classes):
             # If Given retinanet has 39w2k boxes, GPU run out of memory, move to cpu
             # sub_boxes.cpu(), sub_scores[j].cpu(), sub_scores[j][keep].cpu()
@@ -1600,16 +1899,20 @@ def _NMS_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
             # keep = nms(sub_boxes, sub_scores[j], iou_threshold)[1]
             keep = keep[sub_scores[j][keep] > score_threshold]  # TODO: check GT or GE
             keep = keep[:max_output_boxes_per_class]
-            keep = torch.stack((torch.full_like(keep, i), torch.full_like(keep, j), keep), dim=1)
+            keep = torch.stack(
+                (torch.full_like(keep, i), torch.full_like(keep, j), keep), dim=1
+            )
             output.append(keep)
     output = torch.cat(output)
-    return output.to('cpu')
+    return output.to("cpu")
 
 
-def ReduceMax_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def ReduceMax_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     [input_value] = values
-    dim = op.attributes.get('axes', None)
-    keepdim = bool(op.attributes.get('keepdims', 1))
+    dim = op.attributes.get("axes", None)
+    keepdim = bool(op.attributes.get("keepdims", 1))
     if len(input_value) == 0:
         output = input_value
     else:
@@ -1623,10 +1926,12 @@ def ReduceMax_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacke
     return output
 
 
-def ReduceMean_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def ReduceMean_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     [input_value] = values
-    dim = op.attributes.get('axes', None)
-    keepdim = bool(op.attributes.get('keepdims', 1))
+    dim = op.attributes.get("axes", None)
+    keepdim = bool(op.attributes.get("keepdims", 1))
     if len(input_value) == 0:
         output = input_value
     else:
@@ -1640,14 +1945,20 @@ def ReduceMean_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBack
     return output
 
 
-def ReduceSum_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def ReduceSum_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     if op.opset.onnx_opset_version() >= 13:
-        ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=2)
+        ASSERT_NUM_OF_INPUT(
+            op=op, values=values, min_num_of_input=1, max_num_of_input=2
+        )
         values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
         input_value, dim = values[0], None
         if len(values) > 1:
             dim = values[1]
-        keepdim, noop_with_empty_axes = bool(op.attributes.get('keepdims', 1)), op.attributes.get('noop_with_empty_axes', 0)
+        keepdim, noop_with_empty_axes = bool(
+            op.attributes.get("keepdims", 1)
+        ), op.attributes.get("noop_with_empty_axes", 0)
 
         if dim is None:
             if noop_with_empty_axes:
@@ -1665,8 +1976,8 @@ def ReduceSum_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacke
             return output
 
     [input_value] = values
-    dim = op.attributes.get('axes', None)
-    keepdim = bool(op.attributes.get('keepdims', 1))
+    dim = op.attributes.get("axes", None)
+    keepdim = bool(op.attributes.get("keepdims", 1))
     if dim is None:
         #  The default is to reduce over all the dimensions of the input tensor
         output = torch.sum(input_value)
@@ -1677,7 +1988,9 @@ def ReduceSum_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacke
     return output
 
 
-def Shape_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Shape_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Takes a tensor as input and outputs an 1D int64 tensor containing the
     shape of the input tensor.
 
@@ -1706,7 +2019,9 @@ def Shape_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCo
     return shape_tensor
 
 
-def TopK_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def TopK_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Retrieve the top-K largest or smallest elements along a specified axis.
     Given an input tensor of shape [a_1, a_2, ..., a_n, r] and integer argument
     k, return two outputs: -Value tensor of shape [a_1, a_2, ..., a_{axis-1},
@@ -1759,9 +2074,9 @@ def TopK_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=2, max_num_of_input=2)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
-    axis    = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='axis', default=-1)
-    largest = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='largest', default=1)
-    sorted  = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='sorted', default=1)
+    axis = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="axis", default=-1)
+    largest = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="largest", default=1)
+    sorted = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="sorted", default=1)
     largest, sorted = bool(largest), bool(sorted)
 
     x, k = values
@@ -1770,7 +2085,9 @@ def TopK_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
     return values, indices
 
 
-def Expand_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Expand_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     """Broadcast the input tensor following the given shape and the broadcast
     rule.
 
@@ -1805,30 +2122,39 @@ def Expand_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     tensor, shape = values
     # TODO torch.ones 将会引起设备间同步
-    output = tensor * torch.ones(convert_any_to_python_primary_type(shape), dtype=tensor.dtype, device=tensor.device)
+    output = tensor * torch.ones(
+        convert_any_to_python_primary_type(shape),
+        dtype=tensor.dtype,
+        device=tensor.device,
+    )
     return output
 
 
-def Equal_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Equal_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     input_a, input_b = values
     output = torch.eq(input_a, input_b)
     return output
 
 
-def Flatten_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Flatten_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     [input_value] = values
-    dim = op.attributes.get('axis', 1)
+    dim = op.attributes.get("axis", 1)
     shape = list(input_value.shape)
-    new_shape = [
-        1, -1] if dim == 0 else [reduce(operator.mul, shape[:dim], 1), -1]
+    new_shape = [1, -1] if dim == 0 else [reduce(operator.mul, shape[:dim], 1), -1]
     output = input_value.reshape(new_shape)
     return output
 
 
-def Range_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Range_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     """
-    Generate a tensor containing a sequence of numbers that 
+    Generate a tensor containing a sequence of numbers that
         begin at start and extends by increments of delta up to limit (exclusive).
 
     The number of elements in the output of range is computed as below-
@@ -1852,13 +2178,13 @@ def Range_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCo
     Inputs
         start : T
             Scalar. First entry for the range of output values.
-    
+
         limit : T
             Scalar. Exclusive upper limit for the range of output values.
-    
+
         delta : T
             Scalar. Value to step by.
-    
+
     Outputs
         output : T
             A 1-D tensor with same type as the inputs containing generated range of values.
@@ -1871,33 +2197,37 @@ def Range_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCo
     return output
 
 
-def Where_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Where_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     condition, x, y = values
     output = torch.where(condition, x, y)
     return output
 
 
-def ScatterElements_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def ScatterElements_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     """
-    ScatterElements takes three inputs data, updates, 
-    and indices of the same rank r >= 1 and an optional attribute axis that identifies an axis of data 
-    (by default, the outer-most axis, that is axis 0). 
-    
-    The output of the operation is produced by creating a copy of the input data, 
-    and then updating its value to values specified by updates at specific index positions specified by indices. 
+    ScatterElements takes three inputs data, updates,
+    and indices of the same rank r >= 1 and an optional attribute axis that identifies an axis of data
+    (by default, the outer-most axis, that is axis 0).
+
+    The output of the operation is produced by creating a copy of the input data,
+    and then updating its value to values specified by updates at specific index positions specified by indices.
     Its output shape is the same as the shape of data.
 
-    For each entry in updates, 
-    the target index in data is obtained by combining the corresponding entry in indices with the index of the entry itself: 
-        the index-value for dimension = axis is obtained from the value of the corresponding entry in indices and the index-value 
+    For each entry in updates,
+    the target index in data is obtained by combining the corresponding entry in indices with the index of the entry itself:
+        the index-value for dimension = axis is obtained from the value of the corresponding entry in indices and the index-value
     for dimension != axis is obtained from the index of the entry itself.
 
-    reduction allows specification of an optional reduction operation, 
+    reduction allows specification of an optional reduction operation,
         which is applied to all values in updates tensor into output at the specified indices.
-    In cases where reduction is set to "none", indices should not have duplicate entries: that is, 
-        if idx1 != idx2, then indices[idx1] != indices[idx2]. 
-    
+    In cases where reduction is set to "none", indices should not have duplicate entries: that is,
+        if idx1 != idx2, then indices[idx1] != indices[idx2].
+
     For instance, in a 2-D tensor case, the update corresponding to the [i][j] entry is performed as below:
 
     output[indices[i][j]][j] = updates[i][j] if axis = 0,
@@ -1917,10 +2247,10 @@ def ScatterElements_forward(op: Operation, values: List[torch.Tensor], ctx: Torc
             Which axis to scatter on. Negative value means counting dimensions from the back.
                 Accepted range is [-r, r-1] where r = rank(data).
             reduction : string (default is none)
-            Type of reduction to apply: none (default), add, mul. 
+            Type of reduction to apply: none (default), add, mul.
 
-            'none': no reduction applied. 
-            'add': reduction using the addition operation. 
+            'none': no reduction applied.
+            'add': reduction using the addition operation.
             'mul': reduction using the multiplication operation.
 
     Inputs
@@ -1928,8 +2258,8 @@ def ScatterElements_forward(op: Operation, values: List[torch.Tensor], ctx: Torc
             Tensor of rank r >= 1.
 
         indices (non-differentiable) : Tind
-            Tensor of int32/int64 indices, of r >= 1 (same rank as input). 
-            All index values are expected to be within bounds [-s, s-1] along axis of size s. 
+            Tensor of int32/int64 indices, of r >= 1 (same rank as input).
+            All index values are expected to be within bounds [-s, s-1] along axis of size s.
             It is an error if any of the index values are out of bounds.
 
         updates (differentiable) : T
@@ -1942,14 +2272,16 @@ def ScatterElements_forward(op: Operation, values: List[torch.Tensor], ctx: Torc
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     value, indices, updates = values
 
-    dim = op.attributes.get('axis', 0)
+    dim = op.attributes.get("axis", 0)
     # Negative indices
     indices[indices < 0] += value.shape[dim]
     output = value.scatter(dim, indices, updates)
     return output
 
 
-def ScatterND_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def ScatterND_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """OPSET 11: ScatterND takes three inputs data tensor of rank r >= 1,
     indices tensor of rank q >= 1,
 
@@ -2011,28 +2343,36 @@ def ScatterND_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacke
     return output
 
 
-def Split_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Split_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     if op.opset.onnx_opset_version() >= 13:
-        ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=2)
+        ASSERT_NUM_OF_INPUT(
+            op=op, values=values, min_num_of_input=1, max_num_of_input=2
+        )
         values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
         value = values[0]
-        axis = op.attributes.get('axis', 0)
+        axis = op.attributes.get("axis", 0)
         split = value.shape[axis] // len(op.outputs)
         if len(values) > 1:
             split = values[1]
             split = split.tolist()
     else:
-        ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
-        axis = op.attributes.get('axis', 0)
-        split = op.attributes.get('split', 0)
+        ASSERT_NUM_OF_INPUT(
+            op=op, values=values, min_num_of_input=1, max_num_of_input=1
+        )
+        axis = op.attributes.get("axis", 0)
+        split = op.attributes.get("split", 0)
         [value] = values
-        if 'split' not in op.attributes:
+        if "split" not in op.attributes:
             split = value.shape[axis] // len(op.outputs)
     outputs = torch.split(value, split, axis)
     return outputs
 
 
-def Gemm_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Gemm_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=2, max_num_of_input=3)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
 
@@ -2040,14 +2380,14 @@ def Gemm_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
 
     # PATCH for ommited reshape before inner product in caffe
     if op.opset.is_caffe() and A.ndim > 2:
-        axis = op.attributes.get('axis', 1)
+        axis = op.attributes.get("axis", 1)
         A = A.flatten(start_dim=axis)
 
     C = values[2] if len(values) > 2 else 0
-    alpha  = op.attributes.get('alpha', 1.0)
-    beta   = op.attributes.get('beta', 1.0)
-    transA = op.attributes.get('transA', 0)
-    transB = op.attributes.get('transB', 0)
+    alpha = op.attributes.get("alpha", 1.0)
+    beta = op.attributes.get("beta", 1.0)
+    transA = op.attributes.get("transA", 0)
+    transB = op.attributes.get("transB", 0)
     A = A.transpose(0, 1) if transA else A
     B = B.transpose(0, 1) if transB else B
 
@@ -2055,9 +2395,11 @@ def Gemm_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
     return output
 
 
-def MatMul_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def MatMul_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """
-    Matrix product that behaves like numpy.matmul: 
+    Matrix product that behaves like numpy.matmul:
         https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.matmul.html
 
     Version
@@ -2068,10 +2410,10 @@ def MatMul_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
     Inputs
         A (differentiable) : T
             N-dimensional matrix A
-    
+
         B (differentiable) : T
             N-dimensional matrix B
-    
+
     Outputs
         Y (differentiable) : T
             Matrix multiply results from A * B
@@ -2082,7 +2424,9 @@ def MatMul_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
     return output
 
 
-def Softmax_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Softmax_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """The operator computes the normalized exponential values for the given
     input:
 
@@ -2116,59 +2460,67 @@ def Softmax_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackend
     default_axis = -1 if op.opset.onnx_opset_version() >= 13 else 1
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
     [input] = values
-    axis = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='axis', default=default_axis)
+    axis = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="axis", default=default_axis)
     output = F.softmax(input, axis)
     return output
 
 
-def ReduceL2_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def ReduceL2_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     [input_value] = values
-    axis = op.attributes['axes']
-    keepdim = bool(op.attributes.get('keepdims', 1))
+    axis = op.attributes["axes"]
+    keepdim = bool(op.attributes.get("keepdims", 1))
     output = torch.norm(input_value, dim=axis, keepdim=keepdim)
     if axis is None and keepdim:
         output = output.reshape([1] * input_value.dim())
     return output
 
 
-def PRelu_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def PRelu_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     input_data, weight = values
     output = F.prelu(input_data, weight)
     return output
 
 
-def LeakyRelu_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def LeakyRelu_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     [input_data] = values
-    alpha = op.attributes.get('alpha', 0.01)
+    alpha = op.attributes.get("alpha", 0.01)
     output = F.leaky_relu(input_data, alpha)
     return output
 
 
-def LayerNorm_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def LayerNorm_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     """
-    This is layer normalization defined in ONNX as function. 
-    The overall computation can be split into two stages. 
-    The first stage is standardization, which makes the normalized elements have zero mean and unit variances. 
-    The computation required by standardization can be described by the following equations. 
-    Mean = ReduceMean<axes=normalized_axes>(X) D = Sub(X, Mean) DD = Mul(Diff, Diff) 
-    Var = ReduceMean<axes=normalized_axes>(DD) VarEps = Add(Var, epsilon) 
-    StdDev = Sqrt(VarEps) InvStdDev = Reciprocal(StdDev) 
-    Normalized = Mul(D, InvStdDev) where normalized_axes is [axis, ..., rank of X - 1]. 
-    
-    The variables Var and StdDev stand for variance and standard deviation, respectively. 
-    The second output is Mean and the last one is InvStdDev. Depending on stash_type attribute, 
-    the actual computation must happen in different floating-point precision. 
-    
-    For example, if stash_type is 1, this operator casts all input variables to 32-bit float, perform the computation, 
-    and finally cast Normalized back to the original type of X. 
-    
+    This is layer normalization defined in ONNX as function.
+    The overall computation can be split into two stages.
+    The first stage is standardization, which makes the normalized elements have zero mean and unit variances.
+    The computation required by standardization can be described by the following equations.
+    Mean = ReduceMean<axes=normalized_axes>(X) D = Sub(X, Mean) DD = Mul(Diff, Diff)
+    Var = ReduceMean<axes=normalized_axes>(DD) VarEps = Add(Var, epsilon)
+    StdDev = Sqrt(VarEps) InvStdDev = Reciprocal(StdDev)
+    Normalized = Mul(D, InvStdDev) where normalized_axes is [axis, ..., rank of X - 1].
+
+    The variables Var and StdDev stand for variance and standard deviation, respectively.
+    The second output is Mean and the last one is InvStdDev. Depending on stash_type attribute,
+    the actual computation must happen in different floating-point precision.
+
+    For example, if stash_type is 1, this operator casts all input variables to 32-bit float, perform the computation,
+    and finally cast Normalized back to the original type of X.
+
     The second stage then scales and shifts the outcome of the first stage using
-        NormalizedScaled = Mul(Normalized, Scale) 
-        Y = Add(NormalizedScaled, B) 
-    The second stage doesn't depends on stash_type. All equations are in this syntax. 
-    
-    The same variable (i.e., input, output, and attribute) uses the same name in the equations above and this operator's definition. 
-    Let d[i] indicate the i-th dimension of X. If X's shape is [d[0], ..., d[axis-1], d[axis], ..., d[rank-1]], 
+        NormalizedScaled = Mul(Normalized, Scale)
+        Y = Add(NormalizedScaled, B)
+    The second stage doesn't depends on stash_type. All equations are in this syntax.
+
+    The same variable (i.e., input, output, and attribute) uses the same name in the equations above and this operator's definition.
+    Let d[i] indicate the i-th dimension of X. If X's shape is [d[0], ..., d[axis-1], d[axis], ..., d[rank-1]],
     the shape of Mean and InvStdDev is [d[0], ..., d[axis-1], 1, ..., 1]. Y and X have the same shape.
 
     Version
@@ -2176,33 +2528,33 @@ def LayerNorm_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacke
 
     Attributes
         axis : int (default is -1)
-            The first normalization dimension. If rank(X) is r, axis' allowed range is [-r, r]. 
+            The first normalization dimension. If rank(X) is r, axis' allowed range is [-r, r].
             Negative value means counting dimensions from the back.
 
         epsilon : float (default is 1e-05)
             The epsilon value to use to avoid division by zero.
 
         stash_type : int (default is 1)
-            Type of Mean and InvStdDev. 
+            Type of Mean and InvStdDev.
             This also specifies stage one's computation precision.
 
     Inputs (2 - 3)
         X : T
             Tensor to be normalized.
-        
+
         Scale : T
             Scale tensor.
-        
+
         B (optional) : T
             Bias tensor.
-    
+
     Outputs (1 - 3)
         Y : T
             Normalized tensor.
-    
+
         Mean (optional) : U
             Saved mean used during training to speed up gradient computation
-        
+
         InvStdDev (optional) : U
             Saved inverse standard deviation used during training to speed up gradient computation.
 
@@ -2211,21 +2563,25 @@ def LayerNorm_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacke
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
 
     x, weight = values[0], values[1]
-    if len(values) == 3: bias = values[-1]
-    else: bias = None
+    if len(values) == 3:
+        bias = values[-1]
+    else:
+        bias = None
 
-    eps  = op.attributes.get('epsilon', 1e-5)
-    axis = op.attributes.get('axis', -1)
+    eps = op.attributes.get("epsilon", 1e-5)
+    axis = op.attributes.get("axis", -1)
 
     if axis != -1 and axis != x.ndim - 1:
-        raise ValueError('Unsupported Layernorm axis. We will implement it soon.')
-    
+        raise ValueError("Unsupported Layernorm axis. We will implement it soon.")
+
     normalized_shape = weight.shape
     output = F.layer_norm(x, normalized_shape, weight, bias, eps)
     return output
 
 
-def skipLayerNormPlugin_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def skipLayerNormPlugin_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     """
     User should check this: http://nvidia.zhidx.com/content-6-1543-1.html
     and this: https://github.com/microsoft/onnxruntime/blob/rel-1.13.1/docs/ContribOperators.md
@@ -2274,29 +2630,33 @@ def skipLayerNormPlugin_forward(op: Operation, values: List[torch.Tensor], ctx: 
 
     x, skip, gamma = values[0], values[1], values[2]
     print(x.shape, skip.shape)
-    if len(values) >= 4: bias = values[3]
-    else: bias = None
+    if len(values) >= 4:
+        bias = values[3]
+    else:
+        bias = None
 
-    eps  = op.attributes.get('epsilon', 1e-5)
-    axis = op.attributes.get('axis', -1)
+    eps = op.attributes.get("epsilon", 1e-5)
+    axis = op.attributes.get("axis", -1)
 
     if axis != -1 and axis != x.ndim - 1:
-        raise ValueError('Unsupported Layernorm axis. We will implement it soon.')
-    
+        raise ValueError("Unsupported Layernorm axis. We will implement it soon.")
+
     normalized_shape = gamma.shape
     output = F.layer_norm(x + skip, normalized_shape, gamma, bias, eps)
     return output
-    
 
-def Pad_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+
+def Pad_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     """
-    Given a tensor containing the data to be padded (data), 
-        a tensor containing the number of start and end pad values for axis (pads), 
+    Given a tensor containing the data to be padded (data),
+        a tensor containing the number of start and end pad values for axis (pads),
         (optionally) a mode, and (optionally) constant_value, a padded tensor (output) is generated.
 
     The three supported modes are (similar to corresponding modes supported by numpy.pad):
 
-        constant(default) - pads with a given constant value as specified by constant_value 
+        constant(default) - pads with a given constant value as specified by constant_value
             (which defaults to 0, empty string, or False)
 
         reflect - pads with the reflection of the vector mirrored on the first and last values of the vector along each axis
@@ -2311,29 +2671,29 @@ def Pad_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     Attributes
         mode : string (default is constant)
         Supported modes: `constant`(default), `reflect`, `edge`
-    
+
     Inputs (2 - 4)
         data (differentiable) : T
             Input tensor.
-    
+
         pads (non-differentiable) : tensor(int64)
-            Tensor of integers indicating the number of padding elements to add or remove 
-            (if negative) at the beginning and end of each axis. For 2D input tensor, it is the number of pixels. 
-            `pads` should be a 1D tensor of shape [2 * num_axes] where `num_axes` refers to the number of elements 
-            in the `axes` input or the input rank if `axes` are not provided explicitly. 
-            
-            `pads` format should be: [x1_begin, x2_begin, ..., x1_end, x2_end,...], 
-            where xi_begin is the number of pad values added at the beginning of 
+            Tensor of integers indicating the number of padding elements to add or remove
+            (if negative) at the beginning and end of each axis. For 2D input tensor, it is the number of pixels.
+            `pads` should be a 1D tensor of shape [2 * num_axes] where `num_axes` refers to the number of elements
+            in the `axes` input or the input rank if `axes` are not provided explicitly.
+
+            `pads` format should be: [x1_begin, x2_begin, ..., x1_end, x2_end,...],
+            where xi_begin is the number of pad values added at the beginning of
             axis `axes[i]` and xi_end, the number of pad values added at the end of axis `axes[i]`.
-    
+
         constant_value (optional, non-differentiable) : T
             (Optional) A scalar value to be used if the mode chosen is `constant` (by default it is 0, empty string or False).
-        
+
         axes (optional, non-differentiable) : Tind
-            1-D tensor of axes that `pads` apply to. Negative value means counting dimensions from the back. 
-            Accepted range is [-r, r-1] where r = rank(data). Behavior is undefined if an axis is repeated. 
+            1-D tensor of axes that `pads` apply to. Negative value means counting dimensions from the back.
+            Accepted range is [-r, r-1] where r = rank(data). Behavior is undefined if an axis is repeated.
             If not provided, all axes are assumed (`[0, 1, ..., input_rank-1]`).
-    
+
     Outputs
         output (differentiable) : T
             Tensor after padding.
@@ -2341,50 +2701,58 @@ def Pad_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     """
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
 
-    mode = op.attributes.get('mode', 'constant')
+    mode = op.attributes.get("mode", "constant")
     value, pads = values[0], values[1]
-    if len(values) > 3: raise ValueError('Unsupported pad version, except at most 2 input variable.')
+    if len(values) > 3:
+        raise ValueError("Unsupported pad version, except at most 2 input variable.")
 
     pads = pads.tolist()
     pads = convert_onnx_pads_to_torch(pads)
 
-    if mode == 'constant':
+    if mode == "constant":
         # default value is 0
         if len(values) == 3 and values[-1] is None:
             constant_value = 0
-        else: constant_value = values[-1].item() if len(values) == 3 else 0
+        else:
+            constant_value = values[-1].item() if len(values) == 3 else 0
         output = F.pad(value, pads, mode, constant_value)
-    elif mode == 'reflect':
+    elif mode == "reflect":
         output = value
         while len(pads) > 4:
             output = F.pad(value, pads[-4:], mode)
-            pads   = pads[: -4]
+            pads = pads[:-4]
         output = F.pad(value, pads, mode)
-    elif mode == 'edge':
-        output = F.pad(value, pads, 'replicate')
+    elif mode == "edge":
+        output = F.pad(value, pads, "replicate")
     else:
-        raise TypeError(f'Unsupported mode {mode} in Pad op')
+        raise TypeError(f"Unsupported mode {mode} in Pad op")
     return output
 
 
-def Sqrt_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Sqrt_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     input_data = values[0]
     output = torch.sqrt(input_data)
     return output
 
 
-def Log_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Log_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     input_data = values[0]
     output = torch.log(input_data)
     return output
 
 
-def Mod_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Mod_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=2, max_num_of_input=2)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
-    fmod = op.attributes.get('fmod', 0)
+    fmod = op.attributes.get("fmod", 0)
     if values[0].dtype in {torch.float, torch.float16, torch.float32, torch.float64}:
-        assert fmod, 'fmod must equals to 1 when operands are floats'
+        assert fmod, "fmod must equals to 1 when operands are floats"
     if fmod:
         output = torch.fmod(values[0], values[1])
     else:
@@ -2392,21 +2760,28 @@ def Mod_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     return output
 
 
-def Softplus_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Softplus_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
     input_data = values[0]
     output = torch.log(torch.exp(input_data) + 1)
     return output
 
 
-def Floor_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Floor_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     input_data = values[0]
     output = torch.floor(input_data)
     return output
 
 
-def RoiAlign_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def RoiAlign_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     from torchvision.ops import roi_align as torch_roi_align
+
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
 
     value = values[0]
@@ -2417,10 +2792,10 @@ def RoiAlign_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacken
     # batch_indices = input_value[2]
     # Attention: for op.attributes.mode=max, mmcv is different from onnx
     # mode = op.attributes.get('mode', 'avg')
-    output_height = op.attributes.get('output_height', 1)
-    output_width = op.attributes.get('output_width', 1)
-    sampling_ratio = op.attributes.get('sampling_ratio', 0)
-    spatial_scale = op.attributes.get('spatial_scale', 1.0)
+    output_height = op.attributes.get("output_height", 1)
+    output_width = op.attributes.get("output_width", 1)
+    sampling_ratio = op.attributes.get("sampling_ratio", 0)
+    spatial_scale = op.attributes.get("spatial_scale", 1.0)
 
     if isinstance(rois, torch.Tensor):
         if rois.shape[1] == 5:
@@ -2428,30 +2803,40 @@ def RoiAlign_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacken
         elif rois.shape[1] == 4:
             boxes = [rois]
         else:
-            raise ValueError(f'Unsupported rois shape {rois.shape}')
+            raise ValueError(f"Unsupported rois shape {rois.shape}")
     else:
-        raise TypeError('Unsupported rois type')
+        raise TypeError("Unsupported rois type")
 
     output_size = (output_height, output_width)
-    output = torch_roi_align(
-        value, boxes, output_size, spatial_scale, sampling_ratio)
+    output = torch_roi_align(value, boxes, output_size, spatial_scale, sampling_ratio)
     return output
 
 
-def MMCVRoiAlign_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def MMCVRoiAlign_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     from mmcv.ops import roi_align as mmcv_roi_align
+
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=2, max_num_of_input=2)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
 
     data, rois = values
     rois = FORCE_CONVERT_DEVICE(rois, device=data.device)
 
-    mode = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='mode', default='avg')
-    aligned = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='aligned', default=True)
-    output_height = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='output_height', default=1)
-    output_width = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='output_width', default=1)
-    sampling_ratio = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='sampling_ratio', default=0)
-    spatial_scale = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='spatial_scale', default=1.0)
+    mode = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="mode", default="avg")
+    aligned = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="aligned", default=True)
+    output_height = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="output_height", default=1
+    )
+    output_width = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="output_width", default=1
+    )
+    sampling_ratio = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="sampling_ratio", default=0
+    )
+    spatial_scale = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="spatial_scale", default=1.0
+    )
 
     output_size = (output_height, output_width)
     if rois.shape[0] == 0:
@@ -2459,15 +2844,18 @@ def MMCVRoiAlign_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBa
         output = torch.empty([0, data.shape[1], 14, 14])
     else:
         output = mmcv_roi_align(
-            data, rois, output_size, spatial_scale, sampling_ratio, mode, aligned)
+            data, rois, output_size, spatial_scale, sampling_ratio, mode, aligned
+        )
     return output
 
 
-def SpaceToDepth_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def SpaceToDepth_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     # SubpixelDown in caffe
     input_data = values[0]
-    downsample = op.attributes.get('blocksize', 1)
+    downsample = op.attributes.get("blocksize", 1)
 
     # F.pixel_unshuffle needs torch >= 1.8.0
     # TODO: Only aligned with pytorch, Caffe has yet to be aligned
@@ -2475,13 +2863,15 @@ def SpaceToDepth_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBa
     return output
 
 
-def DepthToSpace_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def DepthToSpace_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     # SubpixelUp in caffe
     input_data = values[0]
-    upsample = op.attributes.get('blocksize', 1)
-    mode = op.attributes.get('mode', 'DCR')
-    if mode == 'DCR':
+    upsample = op.attributes.get("blocksize", 1)
+    mode = op.attributes.get("mode", "DCR")
+    if mode == "DCR":
         output = F.pixel_shuffle(input_data, upsample)
     else:  # mode == 'CRD'
         # ??? i do kown why following is correct.
@@ -2489,15 +2879,17 @@ def DepthToSpace_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBa
     return output
 
 
-def Scale_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Scale_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     # if just one bottom is given, scale is a learned parameter
     assert len(values) >= 2
     input_data = values[0]
     scale = values[1]
 
-    bias_term = op.attributes.get('bias_term', False)
-    axis = op.attributes.get('axis', 1)
+    bias_term = op.attributes.get("bias_term", False)
+    axis = op.attributes.get("axis", 1)
     # num_axes is ignored unless just one bottom is given
     # num_axes is determined by the number of axes by the second bottom
     # num_axes = scale.dim()
@@ -2522,22 +2914,30 @@ def Scale_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCo
     return output
 
 
-def Tanh_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Tanh_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     input_data = values[0]
     output = torch.tanh(input_data)
     return output
 
-def Tan_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+
+def Tan_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     input_data = values[0]
     output = torch.tan(input_data)
     return output
 
-def Pow_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+
+def Pow_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     input_data = values[0]
-    power = op.attributes.get('power', 1)
-    scale = op.attributes.get('scale', 1)
-    shift = op.attributes.get('shift', 0)
+    power = op.attributes.get("power", 1)
+    scale = op.attributes.get("scale", 1)
+    shift = op.attributes.get("shift", 0)
 
     if len(values) == 2:  # In onnx op, power is the second input
         power = values[1]
@@ -2547,9 +2947,11 @@ def Pow_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     return output
 
 
-def ChannelShuffle_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def ChannelShuffle_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     input_data = values[0]
-    group = op.attributes.get('group', 1)
+    group = op.attributes.get("group", 1)
     assert input_data.shape[1] % group == 0
 
     n, c, h, w = input_data.shape
@@ -2559,11 +2961,13 @@ def ChannelShuffle_forward(op: Operation, values: List[torch.Tensor], ctx: Torch
     return output
 
 
-def InstanceNormalization_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def InstanceNormalization_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
-    num_features = op.attributes.get('num_features', 1)
-    eps = op.attributes.get('eps', 1e-5)
-    affine = op.attributes.get('affine', False)
+    num_features = op.attributes.get("num_features", 1)
+    eps = op.attributes.get("eps", 1e-5)
+    affine = op.attributes.get("affine", False)
 
     # TODO:
     # For len(input_value)==5 not support yet, inputs = [data weight bais mean and var].
@@ -2576,21 +2980,23 @@ def InstanceNormalization_forward(op: Operation, values: List[torch.Tensor], ctx
         input_data = values[0]
         running_mean, running_var, weight, bias = None, None, None, None
     else:
-        raise ValueError(
-            f'The number of input data in InstanceNom is {len(values)}')
+        raise ValueError(f"The number of input data in InstanceNom is {len(values)}")
 
     if affine:  # caffe op check
         assert num_features == input_data.shape[1]
 
-    output = F.instance_norm(input_data, running_mean,
-                             running_var, weight, bias, eps=eps)
+    output = F.instance_norm(
+        input_data, running_mean, running_var, weight, bias, eps=eps
+    )
     return output
 
 
-def Parameter_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def Parameter_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     input_data = values[0]
-    m = op.attributes.get('m', -1)
-    n = op.attributes.get('n', -1)
+    m = op.attributes.get("m", -1)
+    n = op.attributes.get("n", -1)
 
     # TODO
     # other parameters of parameter op are not added yet
@@ -2598,15 +3004,17 @@ def Parameter_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacke
     return output
 
 
-def CaffeArgMax_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs):
+def CaffeArgMax_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+):
     assert len(values) == 1
     input_data = values[0]
-    dim = op.attributes.get('axis', None)
-    output = input_data.topk(op.attributes.get('top_k', 1), dim=dim)
+    dim = op.attributes.get("axis", None)
+    output = input_data.topk(op.attributes.get("top_k", 1), dim=dim)
     return output  # only return maxval now
 
     # TODO
-    '''
+    """
     # There are some gaps between ppl-argmax and standard argmax
     # If out_max_val is true, produce pairs (argmax, maxval)
     output = (output[1], output[0])
@@ -2614,52 +3022,54 @@ def CaffeArgMax_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBac
         _update_output(op, output, 1)
     else:
         _update_output(op, output[0], 1)
-    '''
-
-
-def GridSampler_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
     """
-    Given an input and a flow-field grid, computes the output using input values and pixel locations from grid. 
-    Currently, only spatial (4-D) inputs are supported. 
-    For input with shape (N, C, H, W) and grid with shape (N, H_out, W_out, 2), 
-    the output will have shape (N, C, H_out, W_out). 
-    For each output location output[N, C, H_out, W_out], 
-    the size-2 vector grid[N, H_out, W_out] specifies input pixel locations x and y, 
+
+
+def GridSampler_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
+    """
+    Given an input and a flow-field grid, computes the output using input values and pixel locations from grid.
+    Currently, only spatial (4-D) inputs are supported.
+    For input with shape (N, C, H, W) and grid with shape (N, H_out, W_out, 2),
+    the output will have shape (N, C, H_out, W_out).
+    For each output location output[N, C, H_out, W_out],
+    the size-2 vector grid[N, H_out, W_out] specifies input pixel locations x and y,
     which are used to interpolate the output value output[N, C, H_out, W_out].
 
-    The GridSample operator is often used in doing grid generator and sampler in the Spatial Transformer Networks. 
+    The GridSample operator is often used in doing grid generator and sampler in the Spatial Transformer Networks.
     See also in torch.nn.functional.grid_sample.
 
     Attributes
         align_corners : int (default is 0)
-            If align_corners=1, the extrema (-1 and 1) are considered as referring to the center points of the input's corner pixels. 
+            If align_corners=1, the extrema (-1 and 1) are considered as referring to the center points of the input's corner pixels.
             If align_corners=0, they are instead considered as referring to the corner points of the input's corner pixels,
             making the sampling more resolution agnostic.
 
         mode : string (default is bilinear)
             Three interpolation modes: bilinear (default), nearest and bicubic.
-    
+
         padding_mode : string (default is zeros)
-            Support padding modes for outside grid values: `zeros`(default), `border`, `reflection`. 
-            zeros: use 0 for out-of-bound grid locations, border: use border values for out-of-bound grid locations, 
+            Support padding modes for outside grid values: `zeros`(default), `border`, `reflection`.
+            zeros: use 0 for out-of-bound grid locations, border: use border values for out-of-bound grid locations,
             reflection: use values at locations reflected by the border for out-of-bound grid locations.
-            If index 0 represents the margin pixel, the reflected value at index -1 will be the same as the value at index 1. 
-            For location far away from the border, it will keep being reflected until becoming in bound. 
+            If index 0 represents the margin pixel, the reflected value at index -1 will be the same as the value at index 1.
+            For location far away from the border, it will keep being reflected until becoming in bound.
             If pixel location x = -3.5 reflects by border -1 and becomes x' = 1.5, then reflects by border 1 and becomes x'' = 0.5.
-    
+
     Inputs
         X (differentiable) : T1
-            4-D tensor of shape (N, C, H, W), where N is the batch size, C is the numbers of channels, 
+            4-D tensor of shape (N, C, H, W), where N is the batch size, C is the numbers of channels,
             H and W are the height and width of the input data.
-        
+
         grid (non-differentiable) : T1
-            Input offset, 4-D tensor of shape (N, H_out, W_out, 2), 
-            where H_out and W_out are the height and width of grid and output, 
+            Input offset, 4-D tensor of shape (N, H_out, W_out, 2),
+            where H_out and W_out are the height and width of grid and output,
             Grid specifies the sampling pixel locations normalized by the input spatial dimensions. Therefore,
-            it should have most values in the range of [-1, 1]. 
-            If grid has values outside the range of [-1, 1], 
+            it should have most values in the range of [-1, 1].
+            If grid has values outside the range of [-1, 1],
             the corresponding outputs will be handled as defined by padding_mode.
-    
+
     Outputs
         Y (differentiable) : T2
             4-D tensor of shape (N, C, H_out, W_out).
@@ -2672,50 +3082,56 @@ def GridSampler_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBac
     return output
 
 
-def Not_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Not_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
     [value] = values
     return ~value
 
 
-def HardSigmoid_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def HardSigmoid_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """
-    HardSigmoid takes one input data (Tensor) and produces one output data (Tensor) where the HardSigmoid function, 
+    HardSigmoid takes one input data (Tensor) and produces one output data (Tensor) where the HardSigmoid function,
     y = max(0, min(1, alpha * x + beta)), is applied to the tensor elementwise.
 
     Attributes
         alpha : float (default is 0.2)
             Value of alpha.
-    
+
         beta : float (default is 0.5)
             Value of beta.
-    
+
     Inputs
         X (differentiable) : T
             Input tensor
-    
+
     Outputs
         Y (differentiable) : T
             Output tensor
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
-    alpha = GET_ATTRIBUTE_FROM_OPERATION(op, 'alpha', default=0.2)
-    beta  = GET_ATTRIBUTE_FROM_OPERATION(op, 'beta', default=0.5)
+    alpha = GET_ATTRIBUTE_FROM_OPERATION(op, "alpha", default=0.2)
+    beta = GET_ATTRIBUTE_FROM_OPERATION(op, "beta", default=0.5)
     [value] = values
     value = alpha * value + beta
     return torch.clip(value, 0, 1)
 
 
-def HardSwish_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def HardSwish_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """
-    HardSwish takes one input data (Tensor) and produces one output data (Tensor) where the HardSwish function, 
-        y = x * max(0, min(1, alpha * x + beta)) = x * HardSigmoid<alpha, beta>(x), 
+    HardSwish takes one input data (Tensor) and produces one output data (Tensor) where the HardSwish function,
+        y = x * max(0, min(1, alpha * x + beta)) = x * HardSigmoid<alpha, beta>(x),
         where alpha = 1/6 and beta = 0.5, is applied to the tensor elementwise.
 
     Inputs
         X (differentiable) : T
             Input tensor
-    
+
     Outputs
         Y (differentiable) : T
         Output tensor
@@ -2725,7 +3141,9 @@ def HardSwish_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBacke
     return F.hardswish(value)
 
 
-def GRU_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def GRU_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Computes an one-layer GRU. This operator is usually supported via some
     custom implementation such as CuDNN.
     只支持 pytorch 导出来的 GRU 啊亲; 必须要 6 个输入 Variable
@@ -2848,98 +3266,158 @@ def GRU_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=3, max_num_of_input=6)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     # first 3 are mandatory input
-    x, w, r   = values[: 3]
-    b         = GET_VALUE_FROM_INPUTS(values, 3)
-    seq_len   = GET_VALUE_FROM_INPUTS(values, 4)
+    x, w, r = values[:3]
+    b = GET_VALUE_FROM_INPUTS(values, 3)
+    seq_len = GET_VALUE_FROM_INPUTS(values, 4)
     initial_h = GET_VALUE_FROM_INPUTS(values, 5)
-    
+
     # sequence length will be dropped without warrning.
     # if seq_len is not None: raise NotImplementedError('PPQ do not support LSTM with explicite length.')
-    
+
     # check attributes
-    activation_alpha = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='activation_alpha', default=None)
-    activation_beta  = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='activation_beta', default=None)
-    activations      = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='activations', default=None)
-    clip             = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='clip', default=None)
-    direction        = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='direction', default='forward')
-    hidden_size      = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='hidden_size', compulsive=True)
-    linear_before_reset = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='layout', default=0)
-    if linear_before_reset != 0: raise NotImplementedError('PPQ do not support LSTM with linear_before_reset != 1.')
-    if activation_alpha is not None: raise NotImplementedError('PPQ do not support LSTM with cutimized activation.')
-    if activation_beta is not None: raise NotImplementedError('PPQ do not support LSTM with cutimized activation.')
-    if activations is not None: raise NotImplementedError('PPQ do not support LSTM with cutimized activation.')
+    activation_alpha = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="activation_alpha", default=None
+    )
+    activation_beta = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="activation_beta", default=None
+    )
+    activations = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="activations", default=None
+    )
+    clip = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="clip", default=None)
+    direction = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="direction", default="forward"
+    )
+    hidden_size = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="hidden_size", compulsive=True
+    )
+    linear_before_reset = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="layout", default=0
+    )
+    if linear_before_reset != 0:
+        raise NotImplementedError(
+            "PPQ do not support LSTM with linear_before_reset != 1."
+        )
+    if activation_alpha is not None:
+        raise NotImplementedError("PPQ do not support LSTM with cutimized activation.")
+    if activation_beta is not None:
+        raise NotImplementedError("PPQ do not support LSTM with cutimized activation.")
+    if activations is not None:
+        raise NotImplementedError("PPQ do not support LSTM with cutimized activation.")
 
     # flag
-    bidirectional = (direction == 'bidirectional')
-    has_bias      = (b is not None)
+    bidirectional = direction == "bidirectional"
+    has_bias = b is not None
 
     # create flatten weights:
     if GRU_FLATTEN_WEIGHT_ATTRIB not in op.attributes:
-        forward_w = torch.cat([
-            w[0][hidden_size * 1: hidden_size * 2],
-            w[0][hidden_size * 0: hidden_size * 1],
-            w[0][hidden_size * 2: hidden_size * 3]], dim=0).contiguous()
-        forward_r = torch.cat([
-            r[0][hidden_size * 1: hidden_size * 2],
-            r[0][hidden_size * 0: hidden_size * 1],
-            r[0][hidden_size * 2: hidden_size * 3]], dim=0).contiguous()
+        forward_w = torch.cat(
+            [
+                w[0][hidden_size * 1 : hidden_size * 2],
+                w[0][hidden_size * 0 : hidden_size * 1],
+                w[0][hidden_size * 2 : hidden_size * 3],
+            ],
+            dim=0,
+        ).contiguous()
+        forward_r = torch.cat(
+            [
+                r[0][hidden_size * 1 : hidden_size * 2],
+                r[0][hidden_size * 0 : hidden_size * 1],
+                r[0][hidden_size * 2 : hidden_size * 3],
+            ],
+            dim=0,
+        ).contiguous()
         if has_bias:
-            forward_bias_1 = torch.cat([
-                b[0, hidden_size * 1: hidden_size * 2],
-                b[0, hidden_size * 0: hidden_size * 1],
-                b[0, hidden_size * 2: hidden_size * 3]]).contiguous()
-            forward_bias_2 = torch.cat([
-                b[0, hidden_size * 4: hidden_size * 5],
-                b[0, hidden_size * 3: hidden_size * 4],
-                b[0, hidden_size * 5: hidden_size * 6]]).contiguous()
+            forward_bias_1 = torch.cat(
+                [
+                    b[0, hidden_size * 1 : hidden_size * 2],
+                    b[0, hidden_size * 0 : hidden_size * 1],
+                    b[0, hidden_size * 2 : hidden_size * 3],
+                ]
+            ).contiguous()
+            forward_bias_2 = torch.cat(
+                [
+                    b[0, hidden_size * 4 : hidden_size * 5],
+                    b[0, hidden_size * 3 : hidden_size * 4],
+                    b[0, hidden_size * 5 : hidden_size * 6],
+                ]
+            ).contiguous()
         if bidirectional == True:
-            reverse_w = torch.cat([
-                w[1][hidden_size * 1: hidden_size * 2],
-                w[1][hidden_size * 0: hidden_size * 1],
-                w[1][hidden_size * 2: hidden_size * 3]], dim=0).contiguous()
-            reverse_r = torch.cat([
-                r[1][hidden_size * 1: hidden_size * 2],
-                r[1][hidden_size * 0: hidden_size * 1],
-                r[1][hidden_size * 2: hidden_size * 3]], dim=0).contiguous()
+            reverse_w = torch.cat(
+                [
+                    w[1][hidden_size * 1 : hidden_size * 2],
+                    w[1][hidden_size * 0 : hidden_size * 1],
+                    w[1][hidden_size * 2 : hidden_size * 3],
+                ],
+                dim=0,
+            ).contiguous()
+            reverse_r = torch.cat(
+                [
+                    r[1][hidden_size * 1 : hidden_size * 2],
+                    r[1][hidden_size * 0 : hidden_size * 1],
+                    r[1][hidden_size * 2 : hidden_size * 3],
+                ],
+                dim=0,
+            ).contiguous()
             if has_bias:
-                reverse_bias_1 = torch.cat([
-                    b[1, hidden_size * 1: hidden_size * 2],
-                    b[1, hidden_size * 0: hidden_size * 1],
-                    b[1, hidden_size * 2: hidden_size * 3]]).contiguous()
-                reverse_bias_2 = torch.cat([
-                    b[1, hidden_size * 4: hidden_size * 5],
-                    b[1, hidden_size * 3: hidden_size * 4],
-                    b[1, hidden_size * 5: hidden_size * 6]]).contiguous()
+                reverse_bias_1 = torch.cat(
+                    [
+                        b[1, hidden_size * 1 : hidden_size * 2],
+                        b[1, hidden_size * 0 : hidden_size * 1],
+                        b[1, hidden_size * 2 : hidden_size * 3],
+                    ]
+                ).contiguous()
+                reverse_bias_2 = torch.cat(
+                    [
+                        b[1, hidden_size * 4 : hidden_size * 5],
+                        b[1, hidden_size * 3 : hidden_size * 4],
+                        b[1, hidden_size * 5 : hidden_size * 6],
+                    ]
+                ).contiguous()
 
         flatten_weight = [forward_w, forward_r]
-        if has_bias:                   flatten_weight = [forward_w, forward_r, forward_bias_1, forward_bias_2]
-        if bidirectional:              flatten_weight = [forward_w, forward_r, reverse_w, reverse_r]
-        if bidirectional and has_bias: flatten_weight = [
-            forward_w, forward_r, forward_bias_1, forward_bias_2, reverse_w, reverse_r, reverse_bias_1, reverse_bias_2]
+        if has_bias:
+            flatten_weight = [forward_w, forward_r, forward_bias_1, forward_bias_2]
+        if bidirectional:
+            flatten_weight = [forward_w, forward_r, reverse_w, reverse_r]
+        if bidirectional and has_bias:
+            flatten_weight = [
+                forward_w,
+                forward_r,
+                forward_bias_1,
+                forward_bias_2,
+                reverse_w,
+                reverse_r,
+                reverse_bias_1,
+                reverse_bias_2,
+            ]
         op.set_extension_attrib(GRU_FLATTEN_WEIGHT_ATTRIB, flatten_weight)
-    
+
     s = 2 if bidirectional else 1
     if initial_h is None:
         initial_h = torch.zeros(
-            size=[s, x.shape[1], x.shape[2]], 
-            device=x.device, dtype=torch.float32)
+            size=[s, x.shape[1], x.shape[2]], device=x.device, dtype=torch.float32
+        )
 
     result = _VF.gru(
-        x,                                       # x
-        initial_h,                               # initial hidden state
-        op._detail[GRU_FLATTEN_WEIGHT_ATTRIB],   # flatten weights
-        has_bias,                                # has bias
-        1,                                       # num of layer
-        0.0,                                     # dropout
-        False,                                   # training flag
-        bidirectional,                           # bidirectional
-        False)                                   # batch first
+        x,  # x
+        initial_h,  # initial hidden state
+        op._detail[GRU_FLATTEN_WEIGHT_ATTRIB],  # flatten weights
+        has_bias,  # has bias
+        1,  # num of layer
+        0.0,  # dropout
+        False,  # training flag
+        bidirectional,  # bidirectional
+        False,
+    )  # batch first
 
     hidden_vector, last_state = result
     return hidden_vector.unsqueeze(1), last_state
 
 
-def LSTM_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def LSTM_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Computes an one-layer LSTM. This operator is usually supported via some
     custom implementation such as CuDNN.
 
@@ -3023,9 +3501,9 @@ def LSTM_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
     - ot = f(Xt*(Wo^T) + Ht-1*(Ro^T) + Po (.) Ct + Wbo + Rbo)
 
     - Ht = ot (.) h(Ct)
-    This operator has optional inputs/outputs. 
-    See the doc for more details about the representation of optional arguments. 
-    An empty string may be used in the place of an actual argument's name to indicate a missing argument. 
+    This operator has optional inputs/outputs.
+    See the doc for more details about the representation of optional arguments.
+    An empty string may be used in the place of an actual argument's name to indicate a missing argument.
     Trailing optional arguments (those not followed by an argument that is present) may also be simply omitted.
 
     Version
@@ -3033,203 +3511,261 @@ def LSTM_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
 
     Attributes
         activation_alpha : list of floats
-            Optional scaling values used by some activation functions. 
-            The values are consumed in the order of activation functions, 
-                for example (f, g, h) in LSTM. 
-    
+            Optional scaling values used by some activation functions.
+            The values are consumed in the order of activation functions,
+                for example (f, g, h) in LSTM.
+
             Default values are the same as of corresponding ONNX operators.For example with LeakyRelu, the default alpha is 0.01.
-    
+
         activation_beta : list of floats
-            Optional scaling values used by some activation functions. 
-            The values are consumed in the order of activation functions, 
-            for example (f, g, h) in LSTM. 
-            
+            Optional scaling values used by some activation functions.
+            The values are consumed in the order of activation functions,
+            for example (f, g, h) in LSTM.
+
             Default values are the same as of corresponding ONNX operators.
-    
+
         activations : list of strings
-            A list of 3 (or 6 if bidirectional) activation functions for input, 
-            output, forget, cell, and hidden. 
-            
-            The activation functions must be one of the activation functions specified above. 
+            A list of 3 (or 6 if bidirectional) activation functions for input,
+            output, forget, cell, and hidden.
+
+            The activation functions must be one of the activation functions specified above.
             Optional: See the equations for default if not specified.
-    
+
         clip : float
-            Cell clip threshold. Clipping bounds the elements of a tensor in the range of 
+            Cell clip threshold. Clipping bounds the elements of a tensor in the range of
             [-threshold, +threshold] and is applied to the input of activations.
             No clip if not specified.
-        
+
         direction : string (default is forward)
-            Specify if the RNN is forward, reverse, or bidirectional. 
+            Specify if the RNN is forward, reverse, or bidirectional.
             Must be one of forward (default), reverse, or bidirectional.
 
         hidden_size : int
             Number of neurons in the hidden layer
-    
+
         input_forget : int (default is 0)
             Couple the input and forget gates if 1.
-    
+
     Inputs (3 - 8)
         X : T
-            The input sequences packed (and potentially padded) into one 3-D tensor 
+            The input sequences packed (and potentially padded) into one 3-D tensor
                 with the shape of `[seq_length, batch_size, input_size]`.
-   
+
         W : T
-            The weight tensor for the gates. Concatenation of `W[iofc]` and `WB[iofc]` 
+            The weight tensor for the gates. Concatenation of `W[iofc]` and `WB[iofc]`
             (if bidirectional) along dimension 0. The tensor has shape `[num_directions, 4*hidden_size, input_size]`.
-    
+
         R : T
-            The recurrence weight tensor. Concatenation of `R[iofc]` and `RB[iofc]` (if bidirectional) along dimension 0. 
+            The recurrence weight tensor. Concatenation of `R[iofc]` and `RB[iofc]` (if bidirectional) along dimension 0.
             This tensor has shape `[num_directions, 4*hidden_size, hidden_size]`.
-    
+
         B (optional) : T
-            The bias tensor for input gate. Concatenation of `[Wb[iofc], Rb[iofc]]`, 
-            and `[WBb[iofc], RBb[iofc]]` (if bidirectional) along dimension 0. 
-            
-            This tensor has shape `[num_directions, 8*hidden_size]`. 
+            The bias tensor for input gate. Concatenation of `[Wb[iofc], Rb[iofc]]`,
+            and `[WBb[iofc], RBb[iofc]]` (if bidirectional) along dimension 0.
+
+            This tensor has shape `[num_directions, 8*hidden_size]`.
             Optional: If not specified - assumed to be 0.
-    
+
         sequence_lens (optional) : T1
-            Optional tensor specifying lengths of the sequences in a batch. 
-            If not specified - assumed all sequences in the batch to have length `seq_length`. 
+            Optional tensor specifying lengths of the sequences in a batch.
+            If not specified - assumed all sequences in the batch to have length `seq_length`.
             It has shape `[batch_size]`.
-        
+
         initial_h (optional) : T
-            Optional initial value of the hidden. 
-            If not specified - assumed to be 0. 
+            Optional initial value of the hidden.
+            If not specified - assumed to be 0.
             It has shape `[num_directions, batch_size, hidden_size]`.
-    
+
         initial_c (optional) : T
-            Optional initial value of the cell. 
-            If not specified - assumed to be 0. 
+            Optional initial value of the cell.
+            If not specified - assumed to be 0.
             It has shape `[num_directions, batch_size, hidden_size]`.
-    
+
         P (optional) : T
             The weight tensor for peepholes.
-            Concatenation of `P[iof]` and `PB[iof]` (if bidirectional) along dimension 0. 
+            Concatenation of `P[iof]` and `PB[iof]` (if bidirectional) along dimension 0.
             It has shape `[num_directions, 3*hidde_size]`. Optional: If not specified - assumed to be 0.
-    
+
     Outputs (0 - 3)
         Y (optional) : T
-            A tensor that concats all the intermediate output values of the hidden. 
+            A tensor that concats all the intermediate output values of the hidden.
             It has shape `[seq_length, num_directions, batch_size, hidden_size]`.
-    
+
         Y_h (optional) : T
-            The last output value of the hidden. 
+            The last output value of the hidden.
             It has shape `[num_directions, batch_size, hidden_size]`.
-    
+
         Y_c (optional) : T
-            The last output value of the cell. 
+            The last output value of the cell.
             It has shape `[num_directions, batch_size, hidden_size]`.
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=3, max_num_of_input=8)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     # first 3 are mandatory input
-    x, w, r   = values[: 3]
-    b         = GET_VALUE_FROM_INPUTS(values, 3)
-    seq_len   = GET_VALUE_FROM_INPUTS(values, 4)
+    x, w, r = values[:3]
+    b = GET_VALUE_FROM_INPUTS(values, 3)
+    seq_len = GET_VALUE_FROM_INPUTS(values, 4)
     initial_h = GET_VALUE_FROM_INPUTS(values, 5)
     initial_c = GET_VALUE_FROM_INPUTS(values, 6)
-    p         = GET_VALUE_FROM_INPUTS(values, 7)
-    if p is not None: raise NotImplementedError('PPQ do not support LSTM with peepholes.')
-    
+    p = GET_VALUE_FROM_INPUTS(values, 7)
+    if p is not None:
+        raise NotImplementedError("PPQ do not support LSTM with peepholes.")
+
     # sequence length will be dropped without warrning.
     # if seq_len is not None: raise NotImplementedError('PPQ do not support LSTM with explicite length.')
 
     # check attributes
-    activation_alpha = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='activation_alpha', default=None)
-    activation_beta  = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='activation_beta', default=None)
-    activations      = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='activations', default=None)
-    clip             = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='clip', default=None)
-    direction        = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='direction', default='forward')
-    hidden_size      = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='hidden_size', compulsive=True)
-    input_forget     = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='input_forget', default=0)
-    layout           = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='layout', default=0)
-    if layout != 0: raise NotImplementedError('PPQ do not support LSTM with layout != 1.')
-    if activation_alpha is not None: raise NotImplementedError('PPQ do not support LSTM with cutimized activation.')
-    if activation_beta is not None: raise NotImplementedError('PPQ do not support LSTM with cutimized activation.')
-    if activations is not None: raise NotImplementedError('PPQ do not support LSTM with cutimized activation.')
+    activation_alpha = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="activation_alpha", default=None
+    )
+    activation_beta = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="activation_beta", default=None
+    )
+    activations = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="activations", default=None
+    )
+    clip = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="clip", default=None)
+    direction = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="direction", default="forward"
+    )
+    hidden_size = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="hidden_size", compulsive=True
+    )
+    input_forget = GET_ATTRIBUTE_FROM_OPERATION(
+        op=op, attribute="input_forget", default=0
+    )
+    layout = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="layout", default=0)
+    if layout != 0:
+        raise NotImplementedError("PPQ do not support LSTM with layout != 1.")
+    if activation_alpha is not None:
+        raise NotImplementedError("PPQ do not support LSTM with cutimized activation.")
+    if activation_beta is not None:
+        raise NotImplementedError("PPQ do not support LSTM with cutimized activation.")
+    if activations is not None:
+        raise NotImplementedError("PPQ do not support LSTM with cutimized activation.")
 
     # flag
-    bidirectional = (direction == 'bidirectional')
-    has_bias      = (b is not None)
+    bidirectional = direction == "bidirectional"
+    has_bias = b is not None
 
-    if direction == 'reverse': raise NotImplementedError('GRU do not support reverse mode now.')
+    if direction == "reverse":
+        raise NotImplementedError("GRU do not support reverse mode now.")
 
     # create flatten weights:
     if LSTM_FLATTEN_WEIGHT_ATTRIB not in op.attributes:
-        forward_w = torch.cat([
-            w[0][hidden_size * 0: hidden_size * 1],
-            w[0][hidden_size * 2: hidden_size * 3],
-            w[0][hidden_size * 3: hidden_size * 4],
-            w[0][hidden_size * 1: hidden_size * 2]], dim=0).contiguous()
-        forward_r = torch.cat([
-            r[0][hidden_size * 0: hidden_size * 1],
-            r[0][hidden_size * 2: hidden_size * 3],
-            r[0][hidden_size * 3: hidden_size * 4],
-            r[0][hidden_size * 1: hidden_size * 2]], dim=0).contiguous()
+        forward_w = torch.cat(
+            [
+                w[0][hidden_size * 0 : hidden_size * 1],
+                w[0][hidden_size * 2 : hidden_size * 3],
+                w[0][hidden_size * 3 : hidden_size * 4],
+                w[0][hidden_size * 1 : hidden_size * 2],
+            ],
+            dim=0,
+        ).contiguous()
+        forward_r = torch.cat(
+            [
+                r[0][hidden_size * 0 : hidden_size * 1],
+                r[0][hidden_size * 2 : hidden_size * 3],
+                r[0][hidden_size * 3 : hidden_size * 4],
+                r[0][hidden_size * 1 : hidden_size * 2],
+            ],
+            dim=0,
+        ).contiguous()
         if has_bias:
-            forward_bias_1 = torch.cat([
-                b[0, hidden_size * 0: hidden_size * 1],
-                b[0, hidden_size * 2: hidden_size * 3],
-                b[0, hidden_size * 3: hidden_size * 4],
-                b[0, hidden_size * 1: hidden_size * 2]]).contiguous()
-            forward_bias_2 = torch.cat([
-                b[0, hidden_size * 4: hidden_size * 5],
-                b[0, hidden_size * 6: hidden_size * 7],
-                b[0, hidden_size * 7: hidden_size * 8],
-                b[0, hidden_size * 5: hidden_size * 6]]).contiguous()
+            forward_bias_1 = torch.cat(
+                [
+                    b[0, hidden_size * 0 : hidden_size * 1],
+                    b[0, hidden_size * 2 : hidden_size * 3],
+                    b[0, hidden_size * 3 : hidden_size * 4],
+                    b[0, hidden_size * 1 : hidden_size * 2],
+                ]
+            ).contiguous()
+            forward_bias_2 = torch.cat(
+                [
+                    b[0, hidden_size * 4 : hidden_size * 5],
+                    b[0, hidden_size * 6 : hidden_size * 7],
+                    b[0, hidden_size * 7 : hidden_size * 8],
+                    b[0, hidden_size * 5 : hidden_size * 6],
+                ]
+            ).contiguous()
         if bidirectional == True:
-            reverse_w = torch.cat([
-                w[1][hidden_size * 0: hidden_size * 1],
-                w[1][hidden_size * 2: hidden_size * 3],
-                w[1][hidden_size * 3: hidden_size * 4],
-                w[1][hidden_size * 1: hidden_size * 2]], dim=0).contiguous()
-            reverse_r = torch.cat([
-                r[1][hidden_size * 0: hidden_size * 1],
-                r[1][hidden_size * 2: hidden_size * 3],
-                r[1][hidden_size * 3: hidden_size * 4],
-                r[1][hidden_size * 1: hidden_size * 2]], dim=0).contiguous()
+            reverse_w = torch.cat(
+                [
+                    w[1][hidden_size * 0 : hidden_size * 1],
+                    w[1][hidden_size * 2 : hidden_size * 3],
+                    w[1][hidden_size * 3 : hidden_size * 4],
+                    w[1][hidden_size * 1 : hidden_size * 2],
+                ],
+                dim=0,
+            ).contiguous()
+            reverse_r = torch.cat(
+                [
+                    r[1][hidden_size * 0 : hidden_size * 1],
+                    r[1][hidden_size * 2 : hidden_size * 3],
+                    r[1][hidden_size * 3 : hidden_size * 4],
+                    r[1][hidden_size * 1 : hidden_size * 2],
+                ],
+                dim=0,
+            ).contiguous()
             if has_bias:
-                reverse_bias_1 = torch.cat([
-                    b[1, hidden_size * 0: hidden_size * 1],
-                    b[1, hidden_size * 2: hidden_size * 3],
-                    b[1, hidden_size * 3: hidden_size * 4],
-                    b[1, hidden_size * 1: hidden_size * 2]]).contiguous()
-                reverse_bias_2 = torch.cat([
-                    b[1, hidden_size * 4: hidden_size * 5],
-                    b[1, hidden_size * 6: hidden_size * 7],
-                    b[1, hidden_size * 7: hidden_size * 8],
-                    b[1, hidden_size * 5: hidden_size * 6]]).contiguous()
-        
+                reverse_bias_1 = torch.cat(
+                    [
+                        b[1, hidden_size * 0 : hidden_size * 1],
+                        b[1, hidden_size * 2 : hidden_size * 3],
+                        b[1, hidden_size * 3 : hidden_size * 4],
+                        b[1, hidden_size * 1 : hidden_size * 2],
+                    ]
+                ).contiguous()
+                reverse_bias_2 = torch.cat(
+                    [
+                        b[1, hidden_size * 4 : hidden_size * 5],
+                        b[1, hidden_size * 6 : hidden_size * 7],
+                        b[1, hidden_size * 7 : hidden_size * 8],
+                        b[1, hidden_size * 5 : hidden_size * 6],
+                    ]
+                ).contiguous()
+
         flatten_weight = [forward_w, forward_r]
-        if has_bias:                   flatten_weight = [forward_w, forward_r, forward_bias_1, forward_bias_2]
-        if bidirectional:              flatten_weight = [forward_w, forward_r, reverse_w, reverse_r]
-        if bidirectional and has_bias: flatten_weight = [
-            forward_w, forward_r, forward_bias_1, forward_bias_2, reverse_w, reverse_r, reverse_bias_1, reverse_bias_2]
+        if has_bias:
+            flatten_weight = [forward_w, forward_r, forward_bias_1, forward_bias_2]
+        if bidirectional:
+            flatten_weight = [forward_w, forward_r, reverse_w, reverse_r]
+        if bidirectional and has_bias:
+            flatten_weight = [
+                forward_w,
+                forward_r,
+                forward_bias_1,
+                forward_bias_2,
+                reverse_w,
+                reverse_r,
+                reverse_bias_1,
+                reverse_bias_2,
+            ]
         op.set_extension_attrib(LSTM_FLATTEN_WEIGHT_ATTRIB, flatten_weight)
     # end if
-    
+
     s = 2 if bidirectional else 1
     if initial_h is None:
         initial_h = torch.zeros(
-            size=[s, x.shape[1], hidden_size], 
-            device=x.device, dtype=torch.float32)
+            size=[s, x.shape[1], hidden_size], device=x.device, dtype=torch.float32
+        )
 
     if initial_c is None:
         initial_c = torch.zeros(
-            size=[s, x.shape[1], hidden_size], 
-            device=x.device, dtype=torch.float32)
+            size=[s, x.shape[1], hidden_size], device=x.device, dtype=torch.float32
+        )
 
     result = _VF.lstm(
-        x.contiguous(),                                   # x
-        (initial_h.contiguous(), initial_c.contiguous()), # initial hidden state
+        x.contiguous(),  # x
+        (initial_h.contiguous(), initial_c.contiguous()),  # initial hidden state
         op._detail[LSTM_FLATTEN_WEIGHT_ATTRIB],  # flatten weights
-        has_bias,                                # has bias
-        1,                                       # num of layer
-        0.0,                                     # dropout
-        False,                                   # training flag
-        bidirectional,                           # bidirectional
-        False)                                   # batch first
+        has_bias,  # has bias
+        1,  # num of layer
+        0.0,  # dropout
+        False,  # training flag
+        bidirectional,  # bidirectional
+        False,
+    )  # batch first
 
     hs, h, c = result
     if bidirectional:
@@ -3241,7 +3777,9 @@ def LSTM_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCon
     return hs, h, c
 
 
-def Neg_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Neg_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """
     Neg takes one input data (Tensor) and produces one output data (Tensor)
     where each element flipped sign, y = -x, is applied to the tensor elementwise.
@@ -3263,7 +3801,9 @@ def Neg_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     return -x
 
 
-def Sigmoid_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Sigmoid_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """
     Sigmoid takes one input data (Tensor) and produces one output data (Tensor) where the sigmoid function,
         y = 1 / (1 + exp(-x)), is applied to the tensor elementwise.
@@ -3289,17 +3829,23 @@ def Sigmoid_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackend
     return torch.sigmoid(values[0])
 
 
-def PPQDeviceSwitch_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def PPQDeviceSwitch_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     [value] = values
     return value.to(ctx.executing_device)
 
 
-def Identity_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Identity_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
     return values[0]
 
 
-def Onehot_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Onehot_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Produces a one-hot tensor based on inputs. The locations represented by
     the index values in the 'indices' input tensor will have 'on_value' and the
     other locations will have 'off_value' in the output tensor,
@@ -3355,7 +3901,7 @@ def Onehot_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
     # implementation from https://github.com/ToriML/onnx2pytorch/blob/master/onnx2pytorch/operations/onehot.py
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=3, max_num_of_input=3)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
-    axis = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='axis', default=-1)
+    axis = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="axis", default=-1)
     indices, depth, values = values
 
     off_value, on_value = values
@@ -3372,7 +3918,9 @@ def Onehot_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendC
     return out
 
 
-def Reciprocal_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Reciprocal_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """
     Reciprocal takes one input data (Tensor) and produces one output data (Tensor) where the reciprocal is,
         y = 1/x, is applied to the tensor elementwise.
@@ -3392,25 +3940,29 @@ def Reciprocal_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBack
     return 1 / x
 
 
-def LogSoftmax_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def LogSoftmax_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
- 
+
     x = Softmax_forward(op=op, values=values, ctx=ctx, kwargs=kwargs)
     x = Log_forward(op=op, values=[x], ctx=ctx, kwargs=kwargs)
     return x
 
 
-def Sin_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Sin_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Calculates the sine of the given input tensor, element-wise.
 
     Inputs
         input (differentiable) : T
             Input tensor
-    
+
     Outputs
         output (differentiable) : T
             The sine of the input tensor computed element-wise
-    
+
     Type Constraints
     T : tensor(float16), tensor(float), tensor(double)
     Constrain input and output types to float tensors.
@@ -3428,17 +3980,19 @@ def Sin_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     return torch.sin(x)
 
 
-def Cos_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Cos_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Calculates the cosine of the given input tensor, element-wise.
 
     Inputs
         input (differentiable) : T
             Input tensor
-    
+
     Outputs
         output (differentiable) : T
             The cosine of the input tensor computed element-wise
-    
+
     Type Constraints
     T : tensor(float16), tensor(float), tensor(double)
     Constrain input and output types to float tensors.
@@ -3456,17 +4010,19 @@ def Cos_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     return torch.cos(x)
 
 
-def Cos_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Cos_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """Calculates the cosine of the given input tensor, element-wise.
 
     Inputs
         input (differentiable) : T
             Input tensor
-    
+
     Outputs
         output (differentiable) : T
             The cosine of the input tensor computed element-wise
-    
+
     Type Constraints
     T : tensor(float16), tensor(float), tensor(double)
     Constrain input and output types to float tensors.
@@ -3484,11 +4040,13 @@ def Cos_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     return torch.cos(x)
 
 
-def Sum_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Sum_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """
-    Element-wise sum of each of the input tensors (with Numpy-style broadcasting support). 
-    All inputs and outputs must have the same data type. 
-    This operator supports multidirectional (i.e., Numpy-style) broadcasting; 
+    Element-wise sum of each of the input tensors (with Numpy-style broadcasting support).
+    All inputs and outputs must have the same data type.
+    This operator supports multidirectional (i.e., Numpy-style) broadcasting;
     for more details please check the doc.
 
     Version
@@ -3502,7 +4060,7 @@ def Sum_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     Outputs
         sum (differentiable) : Tq
             Output tensor.
-    
+
     Type Constraints
         T : tensor(float16), tensor(float), tensor(double), tensor(bfloat16)
     Constrain input and output types to float tensors.
@@ -3517,7 +4075,8 @@ def Sum_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     """
     if op.platform != TargetPlatform.SOI:
         target_device = ctx.executing_device
-    else: target_device = 'cpu'
+    else:
+        target_device = "cpu"
 
     output = torch.zeros_like(values[0]).to(target_device)
     for value in values:
@@ -3525,10 +4084,12 @@ def Sum_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     return output
 
 
-def Elu_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Elu_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """
-    Elu takes one input data (Tensor) and produces one output data (Tensor) 
-    where the function f(x) = alpha * (exp(x) - 1.) for x < 0, f(x) = x for x >= 0., 
+    Elu takes one input data (Tensor) and produces one output data (Tensor)
+    where the function f(x) = alpha * (exp(x) - 1.) for x < 0, f(x) = x for x >= 0.,
     is applied to the tensor elementwise.
 
     Version
@@ -3539,29 +4100,31 @@ def Elu_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     Attributes
         alpha : float (default is 1.0)
             Coefficient of ELU.
-    
+
     Inputs
         X (differentiable) : T
             1D input tensor
-    
+
     Outputs
         Y (differentiable) : T
             1D output tensor
-    
+
     Type Constraints
     T : tensor(float16), tensor(float), tensor(double)
     Constrain input and output types to float tensors.
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
     [x] = values
-    alpha = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute='alpha', default=1.0)
+    alpha = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="alpha", default=1.0)
     return F.elu(x, alpha=alpha)
 
 
-def Erf_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def Erf_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """
-    Elu takes one input data (Tensor) and produces one output data (Tensor) 
-    where the function f(x) = alpha * (exp(x) - 1.) for x < 0, f(x) = x for x >= 0., 
+    Elu takes one input data (Tensor) and produces one output data (Tensor)
+    where the function f(x) = alpha * (exp(x) - 1.) for x < 0, f(x) = x for x >= 0.,
     is applied to the tensor elementwise.
 
     Version
@@ -3572,28 +4135,30 @@ def Erf_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendCont
     Attributes
         alpha : float (default is 1.0)
             Coefficient of ELU.
-    
+
     Inputs
         X (differentiable) : T
             1D input tensor
-    
+
     Outputs
         Y (differentiable) : T
             1D output tensor
-    
+
     Type Constraints
     T : tensor(float16), tensor(float), tensor(double)
     Constrain input and output types to float tensors.
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
     [x] = values
-    return torch.erf(x) # may require a higher version pytorch
+    return torch.erf(x)  # may require a higher version pytorch
 
 
-def PPQBiasFusedMatMul_forward(op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs) -> torch.Tensor:
+def PPQBiasFusedMatMul_forward(
+    op: Operation, values: List[torch.Tensor], ctx: TorchBackendContext = None, **kwargs
+) -> torch.Tensor:
     """
     PPQ Special Edition of MatMul
-        Matrix product that behaves like numpy.matmul: 
+        Matrix product that behaves like numpy.matmul:
         https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.matmul.html
 
     Version
@@ -3604,13 +4169,13 @@ def PPQBiasFusedMatMul_forward(op: Operation, values: List[torch.Tensor], ctx: T
     Inputs
         A (differentiable) : T
             N-dimensional matrix A
-    
+
         B (differentiable) : T
             N-dimensional matrix B
-            
+
         C (Optional) (differentiable) : T
             Bias Tensor Of MatMul
-    
+
     Outputs
         Y (differentiable) : T
             Matrix multiply results from A * B
@@ -3626,109 +4191,110 @@ def PPQBiasFusedMatMul_forward(op: Operation, values: List[torch.Tensor], ctx: T
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=2, max_num_of_input=3)
     values = VALUE_TO_EXECUTING_DEVICE(op=op, ctx=ctx, values=values)
     output = torch.matmul(values[0], values[1])
-    if len(values) == 3: output += values[-1]
+    if len(values) == 3:
+        output += values[-1]
     return output
 
 
 DEFAULT_BACKEND_TABLE = {
-    'Abs': Abs_forward,
-    'AdaptiveAvgPool2d': AdaptiveAvgPool2d_forward,
-    'And':And_forward,
-    'Add': Add_forward,
-    'ArgMax': ArgMax_forward,
-    'Attention': Attention_forward,
-    'AveragePool': AveragePool_forward,
-    'BatchNormalization': BatchNormalization_forward,
-    'Cast': Cast_forward,
-    'Clip': Clip_forward,
-    'Concat': Concat_forward,
-    'Constant': Constant_forward,
-    'ConstantOfShape': ConstantOfShape_forward,
-    'Conv': Conv_forward,
-    'ConvTranspose': ConvTranspose_forward,
-    'Cos': Cos_forward,
-    'Div': Eltwise_forward,
-    'Equal': Equal_forward,
-    'Exp': UnaryEltwise_forward,
-    'Expand': Expand_forward,
-    'Flatten': Flatten_forward,
-    'Gather': Gather_forward,
-    'GatherElements': Gather_forward,
-    'GatherND': GatherND_forward,
-    'Gelu': Gelu_forward,
-    'Gemm': Gemm_forward,
-    'grid_sampler': GridSampler_forward,
-    'GlobalAveragePool': AveragePool_forward,
-    'GlobalMaxPool': MaxPool2d_forward,
-    'Greater': Greater_forward,
-    'LayerNorm': LayerNorm_forward, # mmdepoly op
-    'LayerNormalization': LayerNorm_forward,
-    'LeakyRelu': LeakyRelu_forward,
-    'Less': Less_forward,
-    'LogSoftmax': LogSoftmax_forward,
-    'MatMul': MatMul_forward,
-    'Max': Eltwise_forward,
-    'MaxPool': MaxPool2d_forward,
-    'Min': Eltwise_forward,
-    'Mul': Mul_forward,
-    'MultiHeadAttention': MultiHeadAttention_forward,
-    'NonMaxSuppression': _NMS_forward,
-    'NonZero': NonZero_forward,
-    'Not': Not_forward,
-    'Pad': Pad_forward,
-    'PPQBiasFusedMatMul': PPQBiasFusedMatMul_forward,
-    'PRelu': PRelu_forward,
-    'Range': Range_forward,
-    'ReduceL2': ReduceL2_forward,
-    'ReduceMax': ReduceMax_forward,
-    'ReduceMean': ReduceMean_forward,
-    'ReduceSum': ReduceSum_forward,
-    'Relu': UnaryEltwise_forward,
-    'Reshape': Reshape_forward,
-    'Resize': Resize_forward,
-    'ScatterElements': ScatterElements_forward,
-    'ScatterND': ScatterND_forward,
-    'Shape': Shape_forward,
-    'Sigmoid': UnaryEltwise_forward,
-    'Sin': Sin_forward,
-    'Slice': Slice_forward,
-    'skipLayerNormPlugin': skipLayerNormPlugin_forward,
-    'Softmax': Softmax_forward,
-    'Softplus': Softplus_forward,
-    'Split': Split_forward,
-    'Squeeze': Squeeze_forward,
-    'Sub': Eltwise_forward,
-    'Tile': Tile_forward,
-    'TopK': TopK_forward,
-    'Transpose': Transpose_forward,
-    'Unsqueeze': Unsqueeze_forward,
-    'Where': Where_forward,
-    'Sqrt': Sqrt_forward,
-    'Log': Log_forward,
-    'Floor': Floor_forward,
-    'RoiAlign': RoiAlign_forward,
-    'MMCVRoiAlign': MMCVRoiAlign_forward,
-    'SpaceToDepth': SpaceToDepth_forward,
-    'DepthToSpace': DepthToSpace_forward,
-    'Scale': Scale_forward,  # caffe op
-    'Tanh': Tanh_forward,
-    'Tan': Tan_forward,
-    'Pow': Pow_forward,
-    'ChannelShuffle': ChannelShuffle_forward,  # caffe op
-    'InstanceNormalization': InstanceNormalization_forward,
-    'Parameter': Parameter_forward,  # caffe op
-    'Interp': Interp_forward,  # caffe op
-    'CaffeArgMax': CaffeArgMax_forward,  # caffe op
-    'HardSigmoid': HardSigmoid_forward,
-    'HardSwish': HardSwish_forward,
-    'Neg': Neg_forward,
-    'GRU': GRU_forward,
-    'PPQDeviceSwitch': PPQDeviceSwitch_forward,
-    'Identity': Identity_forward,
-    'OneHot': Onehot_forward,
-    'Reciprocal': Reciprocal_forward,
-    'LSTM': LSTM_forward,
-    'Sum': Sum_forward,
-    'Elu': Elu_forward,
-    'Erf': Erf_forward,
+    "Abs": Abs_forward,
+    "AdaptiveAvgPool2d": AdaptiveAvgPool2d_forward,
+    "And": And_forward,
+    "Add": Add_forward,
+    "ArgMax": ArgMax_forward,
+    "Attention": Attention_forward,
+    "AveragePool": AveragePool_forward,
+    "BatchNormalization": BatchNormalization_forward,
+    "Cast": Cast_forward,
+    "Clip": Clip_forward,
+    "Concat": Concat_forward,
+    "Constant": Constant_forward,
+    "ConstantOfShape": ConstantOfShape_forward,
+    "Conv": Conv_forward,
+    "ConvTranspose": ConvTranspose_forward,
+    "Cos": Cos_forward,
+    "Div": Eltwise_forward,
+    "Equal": Equal_forward,
+    "Exp": UnaryEltwise_forward,
+    "Expand": Expand_forward,
+    "Flatten": Flatten_forward,
+    "Gather": Gather_forward,
+    "GatherElements": Gather_forward,
+    "GatherND": GatherND_forward,
+    "Gelu": Gelu_forward,
+    "Gemm": Gemm_forward,
+    "grid_sampler": GridSampler_forward,
+    "GlobalAveragePool": AveragePool_forward,
+    "GlobalMaxPool": MaxPool2d_forward,
+    "Greater": Greater_forward,
+    "LayerNorm": LayerNorm_forward,  # mmdepoly op
+    "LayerNormalization": LayerNorm_forward,
+    "LeakyRelu": LeakyRelu_forward,
+    "Less": Less_forward,
+    "LogSoftmax": LogSoftmax_forward,
+    "MatMul": MatMul_forward,
+    "Max": Eltwise_forward,
+    "MaxPool": MaxPool2d_forward,
+    "Min": Eltwise_forward,
+    "Mul": Mul_forward,
+    "MultiHeadAttention": MultiHeadAttention_forward,
+    "NonMaxSuppression": _NMS_forward,
+    "NonZero": NonZero_forward,
+    "Not": Not_forward,
+    "Pad": Pad_forward,
+    "PPQBiasFusedMatMul": PPQBiasFusedMatMul_forward,
+    "PRelu": PRelu_forward,
+    "Range": Range_forward,
+    "ReduceL2": ReduceL2_forward,
+    "ReduceMax": ReduceMax_forward,
+    "ReduceMean": ReduceMean_forward,
+    "ReduceSum": ReduceSum_forward,
+    "Relu": UnaryEltwise_forward,
+    "Reshape": Reshape_forward,
+    "Resize": Resize_forward,
+    "ScatterElements": ScatterElements_forward,
+    "ScatterND": ScatterND_forward,
+    "Shape": Shape_forward,
+    "Sigmoid": UnaryEltwise_forward,
+    "Sin": Sin_forward,
+    "Slice": Slice_forward,
+    "skipLayerNormPlugin": skipLayerNormPlugin_forward,
+    "Softmax": Softmax_forward,
+    "Softplus": Softplus_forward,
+    "Split": Split_forward,
+    "Squeeze": Squeeze_forward,
+    "Sub": Eltwise_forward,
+    "Tile": Tile_forward,
+    "TopK": TopK_forward,
+    "Transpose": Transpose_forward,
+    "Unsqueeze": Unsqueeze_forward,
+    "Where": Where_forward,
+    "Sqrt": Sqrt_forward,
+    "Log": Log_forward,
+    "Floor": Floor_forward,
+    "RoiAlign": RoiAlign_forward,
+    "MMCVRoiAlign": MMCVRoiAlign_forward,
+    "SpaceToDepth": SpaceToDepth_forward,
+    "DepthToSpace": DepthToSpace_forward,
+    "Scale": Scale_forward,  # caffe op
+    "Tanh": Tanh_forward,
+    "Tan": Tan_forward,
+    "Pow": Pow_forward,
+    "ChannelShuffle": ChannelShuffle_forward,  # caffe op
+    "InstanceNormalization": InstanceNormalization_forward,
+    "Parameter": Parameter_forward,  # caffe op
+    "Interp": Interp_forward,  # caffe op
+    "CaffeArgMax": CaffeArgMax_forward,  # caffe op
+    "HardSigmoid": HardSigmoid_forward,
+    "HardSwish": HardSwish_forward,
+    "Neg": Neg_forward,
+    "GRU": GRU_forward,
+    "PPQDeviceSwitch": PPQDeviceSwitch_forward,
+    "Identity": Identity_forward,
+    "OneHot": Onehot_forward,
+    "Reciprocal": Reciprocal_forward,
+    "LSTM": LSTM_forward,
+    "Sum": Sum_forward,
+    "Elu": Elu_forward,
+    "Erf": Erf_forward,
 }

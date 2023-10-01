@@ -10,8 +10,13 @@ from ppq.core import TargetPlatform
 from ppq.IR import BaseGraph
 from ppq.IR.search import SearchableGraph
 
-from .base import (GraphDispatcher, SOI_generators, SOI_receivers,
-                   reverse_tracing_pattern, value_tracing_pattern)
+from .base import (
+    GraphDispatcher,
+    SOI_generators,
+    SOI_receivers,
+    reverse_tracing_pattern,
+    value_tracing_pattern,
+)
 
 
 class AggresiveDispatcher(GraphDispatcher):
@@ -30,17 +35,18 @@ class AggresiveDispatcher(GraphDispatcher):
     ATTENTION: this dispatcher will insert necessary DeviceSwitch operations
         between shape-or-index operations and others.
     """
+
     def __init__(self, graph: BaseGraph) -> None:
         super().__init__()
         self.graph = graph
-        
+
     def dispatch(
-        self, 
+        self,
         quant_platform: TargetPlatform = TargetPlatform.UNSPECIFIED,
         fp32_platform: TargetPlatform = TargetPlatform.FP32,
         SOI_platform: TargetPlatform = TargetPlatform.SOI,
         **kwargs
-        ) -> Dict[str, TargetPlatform]:
+    ) -> Dict[str, TargetPlatform]:
         """Graph Dispatcher splits a graph into parts, each part of graph will
         be sent to a specific platform for further execution and quantization.
 
@@ -64,7 +70,7 @@ class AggresiveDispatcher(GraphDispatcher):
             quant_platform (TargetPlatform):
                 platform object where quantable parts will goes to.
 
-            SOI_platform (TargetPlatform): 
+            SOI_platform (TargetPlatform):
                 platform object where SOI parts will goes to.
 
             fp32_platform (TargetPlatform):
@@ -75,22 +81,29 @@ class AggresiveDispatcher(GraphDispatcher):
         """
         graph = self.graph
         recivers, generators = SOI_receivers(graph), SOI_generators(graph)
-        search_engine, SOI_operations, FP32_operations = SearchableGraph(graph), set(recivers), set()
+        search_engine, SOI_operations, FP32_operations = (
+            SearchableGraph(graph),
+            set(recivers),
+            set(),
+        )
 
         quant_operations = search_engine.opset_matching(
-            sp_expr = lambda x: x.is_computing_op,
-            rp_expr = value_tracing_pattern,
-            ep_expr = lambda x: x.type in {'Shape', 'TopK', 'NonMaxSuppression'} or x.is_boundary,
-            direction = 'down')
+            sp_expr=lambda x: x.is_computing_op,
+            rp_expr=value_tracing_pattern,
+            ep_expr=lambda x: x.type in {"Shape", "TopK", "NonMaxSuppression"}
+            or x.is_boundary,
+            direction="down",
+        )
         # remove shape operations from computing ops.
-        quant_operations.filter(lambda x: x.type == 'Shape')
+        quant_operations.filter(lambda x: x.type == "Shape")
 
         # we assume all 'Shape', 'NonMaxSuppression', 'ConstantOfShape', 'Topk' operations are SOI generators.
         shape_forward_matching = search_engine.opset_matching(
-            sp_expr = lambda x: x in generators and x.type not in {'Constant'},
-            rp_expr = value_tracing_pattern,
-            ep_expr = lambda x: x in recivers or x in quant_operations or x.is_boundary,
-            direction = 'down')
+            sp_expr=lambda x: x in generators and x.type not in {"Constant"},
+            rp_expr=value_tracing_pattern,
+            ep_expr=lambda x: x in recivers or x in quant_operations or x.is_boundary,
+            direction="down",
+        )
 
         # update matchings, ready for further searching.
         SOI_operations.update(shape_forward_matching)
@@ -100,12 +113,18 @@ class AggresiveDispatcher(GraphDispatcher):
             # there are some particular cases where a single matching can not handle.
             # to cover all shape-related operations, a reverse matching is required.
             shape_backward_matching = search_engine.opset_matching(
-                sp_expr = lambda x: x in SOI_operations and x.type != 'Shape' and not x in quant_operations,
-                rp_expr = reverse_tracing_pattern,
-                ep_expr = lambda x: x in generators or x in quant_operations or x.is_boundary,
-                direction = 'up')
+                sp_expr=lambda x: x in SOI_operations
+                and x.type != "Shape"
+                and not x in quant_operations,
+                rp_expr=reverse_tracing_pattern,
+                ep_expr=lambda x: x in generators
+                or x in quant_operations
+                or x.is_boundary,
+                direction="up",
+            )
 
-            if all([(op in SOI_operations) for op in shape_backward_matching]): break
+            if all([(op in SOI_operations) for op in shape_backward_matching]):
+                break
             # update matchings
             SOI_operations.update(shape_backward_matching)
 
@@ -120,16 +139,21 @@ class AggresiveDispatcher(GraphDispatcher):
                 dispatching_table[operation.name] = fp32_platform
 
             # move Topk, Shape, NonMaxSuppression to platform as same as their input.
-            if operation.type in {'Shape', 'TopK', 'NonMaxSuppression'}:
+            if operation.type in {"Shape", "TopK", "NonMaxSuppression"}:
                 if operation.inputs[0].source_op is not None:
-                    dispatching_table[operation.name] = operation.inputs[0].source_op.platform
-                else: dispatching_table[operation.name] = quant_platform
+                    dispatching_table[operation.name] = operation.inputs[
+                        0
+                    ].source_op.platform
+                else:
+                    dispatching_table[operation.name] = quant_platform
 
             # move activations to the platform same as their input.
             if operation.is_linear_activation:
                 source_op = operation.inputs[0].source_op
                 if source_op is not None:
-                    dispatching_table[operation.name] = dispatching_table[source_op.name]
+                    dispatching_table[operation.name] = dispatching_table[
+                        source_op.name
+                    ]
 
         return dispatching_table
 
@@ -153,16 +177,19 @@ class ConservativeDispatcher(GraphDispatcher):
     ATTENTION: this dispatcher will insert necessary DeviceSwitch operations
         between shape-or-index operations and others.
     """
+
     def __init__(self, graph: BaseGraph) -> None:
         super().__init__()
         self.graph = graph
 
     def dispatch(
-        self, quant_types: Set[str],
+        self,
+        quant_types: Set[str],
         quant_platform: TargetPlatform = TargetPlatform.UNSPECIFIED,
         fp32_platform: TargetPlatform = TargetPlatform.FP32,
-        SOI_platform: TargetPlatform = TargetPlatform.SOI, **kwargs
-        ) -> Dict[str, TargetPlatform]:
+        SOI_platform: TargetPlatform = TargetPlatform.SOI,
+        **kwargs
+    ) -> Dict[str, TargetPlatform]:
         """Graph Dispatcher splits a graph into parts, each part of graph will
         be sent to a specific platform for further execution and quantization.
 
@@ -200,30 +227,38 @@ class ConservativeDispatcher(GraphDispatcher):
         search_engine, SOI_operations = SearchableGraph(graph), set(recivers)
 
         quant_operations = search_engine.opset_matching(
-            sp_expr = lambda x: x.is_computing_op,
-            rp_expr = value_tracing_pattern,
-            ep_expr = lambda x: (x.type not in quant_types) or x.is_boundary,
-            direction = 'down')
+            sp_expr=lambda x: x.is_computing_op,
+            rp_expr=value_tracing_pattern,
+            ep_expr=lambda x: (x.type not in quant_types) or x.is_boundary,
+            direction="down",
+        )
         quant_operations.filter(lambda x: x.type not in quant_types)
 
         computing_extensions = search_engine.opset_matching(
-            sp_expr = lambda x: x.is_computing_op,
-            rp_expr = value_tracing_pattern,
-            ep_expr = lambda x: x.type in {'Shape', 'TopK', 'NonMaxSuppression'} or x.is_boundary,
-            direction = 'down')
+            sp_expr=lambda x: x.is_computing_op,
+            rp_expr=value_tracing_pattern,
+            ep_expr=lambda x: x.type in {"Shape", "TopK", "NonMaxSuppression"}
+            or x.is_boundary,
+            direction="down",
+        )
 
         # we assume all 'Shape', 'NonMaxSuppression', 'ConstantOfShape', 'Topk' operations are SOI generators.
         shape_forward_matching = search_engine.opset_matching(
-            sp_expr = lambda x: x in generators and x.type not in {'Constant'},
-            rp_expr = value_tracing_pattern,
-            ep_expr = lambda x: (x in recivers or
-                                 x in quant_operations or
-                                 x.is_boundary or
-                                 x.is_computing_op),
-            direction = 'down')
+            sp_expr=lambda x: x in generators and x.type not in {"Constant"},
+            rp_expr=value_tracing_pattern,
+            ep_expr=lambda x: (
+                x in recivers
+                or x in quant_operations
+                or x.is_boundary
+                or x.is_computing_op
+            ),
+            direction="down",
+        )
 
         # remove computing operations and quant operations from matching
-        shape_forward_matching.filter(lambda x: x.is_computing_op or x in quant_operations)
+        shape_forward_matching.filter(
+            lambda x: x.is_computing_op or x in quant_operations
+        )
 
         # update matchings, ready for further searching.
         SOI_operations.update(shape_forward_matching)
@@ -232,18 +267,24 @@ class ConservativeDispatcher(GraphDispatcher):
             # there are some particular cases where a single matching can not handle.
             # to cover all shape-related operations, a reverse matching is required.
             shape_backward_matching = search_engine.opset_matching(
-                sp_expr = lambda x: x in SOI_operations and x.type != 'Shape',
-                rp_expr = reverse_tracing_pattern,
-                ep_expr = lambda x: (x in SOI_operations or
-                                     x in quant_operations or
-                                     x.is_boundary or
-                                     x.is_computing_op),
-                direction = 'up')
+                sp_expr=lambda x: x in SOI_operations and x.type != "Shape",
+                rp_expr=reverse_tracing_pattern,
+                ep_expr=lambda x: (
+                    x in SOI_operations
+                    or x in quant_operations
+                    or x.is_boundary
+                    or x.is_computing_op
+                ),
+                direction="up",
+            )
 
             # remove computing operations and quant operations from matching
-            shape_backward_matching.filter(lambda x: x.is_computing_op or x in quant_operations)
+            shape_backward_matching.filter(
+                lambda x: x.is_computing_op or x in quant_operations
+            )
 
-            if all([(op in SOI_operations) for op in shape_backward_matching]): break
+            if all([(op in SOI_operations) for op in shape_backward_matching]):
+                break
 
             # update matchings
             SOI_operations.update(shape_backward_matching)
@@ -260,17 +301,22 @@ class ConservativeDispatcher(GraphDispatcher):
 
         for operation in graph.operations.values():
             # move Topk, Shape, NonMaxSuppression to the platform same as their input.
-            if operation.type in {'Shape', 'TopK', 'NonMaxSuppression'}:
+            if operation.type in {"Shape", "TopK", "NonMaxSuppression"}:
                 source_op = operation.inputs[0].source_op
                 if source_op is not None:
-                    dispatching_table[operation.name] = dispatching_table[source_op.name]
-                else: dispatching_table[operation.name] = fp32_platform
+                    dispatching_table[operation.name] = dispatching_table[
+                        source_op.name
+                    ]
+                else:
+                    dispatching_table[operation.name] = fp32_platform
 
             # move activations to the platform same as their input.
             if operation.is_linear_activation:
                 source_op = operation.inputs[0].source_op
                 if source_op is not None:
-                    dispatching_table[operation.name] = dispatching_table[source_op.name]
+                    dispatching_table[operation.name] = dispatching_table[
+                        source_op.name
+                    ]
 
         return dispatching_table
 
@@ -294,16 +340,19 @@ class PPLNNDispatcher(GraphDispatcher):
     ATTENTION: this dispatcher will insert necessary DeviceSwitch operations
         between shape-or-index operations and others.
     """
+
     def __init__(self, graph: BaseGraph) -> None:
         super().__init__()
         self.graph = graph
 
     def dispatch(
-        self, quant_types: Set[str],
+        self,
+        quant_types: Set[str],
         quant_platform: TargetPlatform = TargetPlatform.UNSPECIFIED,
         fp32_platform: TargetPlatform = TargetPlatform.FP32,
-        SOI_platform: TargetPlatform = TargetPlatform.SOI, **kwargs
-        ) -> Dict[str, TargetPlatform]:
+        SOI_platform: TargetPlatform = TargetPlatform.SOI,
+        **kwargs
+    ) -> Dict[str, TargetPlatform]:
         """Graph Dispatcher splits a graph into parts, each part of graph will
         be sent to a specific platform for further execution and quantization.
 
@@ -341,29 +390,37 @@ class PPLNNDispatcher(GraphDispatcher):
         search_engine, SOI_operations = SearchableGraph(graph), set(recivers)
 
         quant_operations = search_engine.opset_matching(
-            sp_expr = lambda x: x.type == 'Conv',
-            rp_expr = lambda x, y: value_tracing_pattern(x, y) and y.type in quant_types,
-            ep_expr = lambda x: x.type == 'Conv',
-            direction = 'down')
+            sp_expr=lambda x: x.type == "Conv",
+            rp_expr=lambda x, y: value_tracing_pattern(x, y) and y.type in quant_types,
+            ep_expr=lambda x: x.type == "Conv",
+            direction="down",
+        )
 
         computing_extensions = search_engine.opset_matching(
-            sp_expr = lambda x: x.is_computing_op,
-            rp_expr = value_tracing_pattern,
-            ep_expr = lambda x: x.type in {'Shape', 'TopK', 'NonMaxSuppression'} or x.is_boundary,
-            direction = 'down')
+            sp_expr=lambda x: x.is_computing_op,
+            rp_expr=value_tracing_pattern,
+            ep_expr=lambda x: x.type in {"Shape", "TopK", "NonMaxSuppression"}
+            or x.is_boundary,
+            direction="down",
+        )
 
         # we assume all 'Shape', 'NonMaxSuppression', 'ConstantOfShape', 'Topk' operations are SOI generators.
         shape_forward_matching = search_engine.opset_matching(
-            sp_expr = lambda x: x in generators and x.type not in {'Constant'},
-            rp_expr = value_tracing_pattern,
-            ep_expr = lambda x: (x in recivers or
-                                 x in quant_operations or
-                                 x.is_boundary or
-                                 x.is_computing_op),
-            direction = 'down')
+            sp_expr=lambda x: x in generators and x.type not in {"Constant"},
+            rp_expr=value_tracing_pattern,
+            ep_expr=lambda x: (
+                x in recivers
+                or x in quant_operations
+                or x.is_boundary
+                or x.is_computing_op
+            ),
+            direction="down",
+        )
 
         # remove computing operations and quant operations from matching
-        shape_forward_matching.filter(lambda x: x.is_computing_op or x in quant_operations)
+        shape_forward_matching.filter(
+            lambda x: x.is_computing_op or x in quant_operations
+        )
 
         # update matchings, ready for further searching.
         SOI_operations.update(shape_forward_matching)
@@ -372,18 +429,24 @@ class PPLNNDispatcher(GraphDispatcher):
             # there are some particular cases where a single matching can not handle.
             # to cover all shape-related operations, a reverse matching is required.
             shape_backward_matching = search_engine.opset_matching(
-                sp_expr = lambda x: x in SOI_operations and x.type != 'Shape',
-                rp_expr = reverse_tracing_pattern,
-                ep_expr = lambda x: (x in SOI_operations or
-                                     x in quant_operations or
-                                     x.is_boundary or
-                                     x.is_computing_op),
-                direction = 'up')
+                sp_expr=lambda x: x in SOI_operations and x.type != "Shape",
+                rp_expr=reverse_tracing_pattern,
+                ep_expr=lambda x: (
+                    x in SOI_operations
+                    or x in quant_operations
+                    or x.is_boundary
+                    or x.is_computing_op
+                ),
+                direction="up",
+            )
 
             # remove computing operations and quant operations from matching
-            shape_backward_matching.filter(lambda x: x.is_computing_op or x in quant_operations)
+            shape_backward_matching.filter(
+                lambda x: x.is_computing_op or x in quant_operations
+            )
 
-            if all([(op in SOI_operations) for op in shape_backward_matching]): break
+            if all([(op in SOI_operations) for op in shape_backward_matching]):
+                break
 
             # update matchings
             SOI_operations.update(shape_backward_matching)
@@ -400,17 +463,22 @@ class PPLNNDispatcher(GraphDispatcher):
 
         for operation in graph.operations.values():
             # move Topk, Shape, NonMaxSuppression to the platform same as their input.
-            if operation.type in {'Shape', 'TopK', 'NonMaxSuppression'}:
+            if operation.type in {"Shape", "TopK", "NonMaxSuppression"}:
                 source_op = operation.inputs[0].source_op
                 if source_op is not None:
-                    dispatching_table[operation.name] = dispatching_table[source_op.name]
-                else: dispatching_table[operation.name] = fp32_platform
+                    dispatching_table[operation.name] = dispatching_table[
+                        source_op.name
+                    ]
+                else:
+                    dispatching_table[operation.name] = fp32_platform
 
             # move activations to the platform same as their input.
             if operation.is_linear_activation:
                 source_op = operation.inputs[0].source_op
                 if source_op is not None:
-                    dispatching_table[operation.name] = dispatching_table[source_op.name]
+                    dispatching_table[operation.name] = dispatching_table[
+                        source_op.name
+                    ]
 
         return dispatching_table
 
@@ -433,16 +501,19 @@ class PointDispatcher(ConservativeDispatcher):
     ATTENTION: this dispatcher will insert necessary DeviceSwitch operations
         between shape-or-index operations and others.
     """
+
     def __init__(self, graph: BaseGraph) -> None:
         super().__init__()
         self.graph = graph
 
     def dispatch(
-        self, quant_types: Set[str],
+        self,
+        quant_types: Set[str],
         quant_platform: TargetPlatform = TargetPlatform.UNSPECIFIED,
         fp32_platform: TargetPlatform = TargetPlatform.FP32,
-        SOI_platform: TargetPlatform = TargetPlatform.SOI, **kwargs
-        ) -> Dict[str, TargetPlatform]:
+        SOI_platform: TargetPlatform = TargetPlatform.SOI,
+        **kwargs
+    ) -> Dict[str, TargetPlatform]:
         """Graph Dispatcher splits a graph into parts, each part of graph will
         be sent to a specific platform for further execution and quantization.
 
@@ -478,16 +549,22 @@ class PointDispatcher(ConservativeDispatcher):
         graph = self.graph
 
         dispatch_table = ConservativeDispatcher.dispatch(
-            graph=graph, quant_types=quant_types, quant_platform=quant_platform, 
-            fp32_platform=fp32_platform, SOI_platform=SOI_platform, kwargs=kwargs)
-        
+            graph=graph,
+            quant_types=quant_types,
+            quant_platform=quant_platform,
+            fp32_platform=fp32_platform,
+            SOI_platform=SOI_platform,
+            kwargs=kwargs,
+        )
+
         skip_ops = set()
         for op in graph.operations.values():
-            if op in skip_ops: continue
+            if op in skip_ops:
+                continue
             if op.type in quant_types and op.is_computing_op:
                 dispatch_table[op.name] = quant_platform
             else:
                 if dispatch_table[op.name] == quant_platform:
                     dispatch_table[op.name] = fp32_platform
-        
+
         return dispatch_table

@@ -7,19 +7,26 @@ from .caffe import ppl_caffe_pb2
 from .caffe.caffe_graph_optim import de_inplace, merge_batchnorm_scale
 from .caffe.caffe_import_utils import caffe_import_map, get_input_shape
 
-logger = NaiveLogger.get_logger('PPQ')
+logger = NaiveLogger.get_logger("PPQ")
+
 
 class CaffeParser(GraphBuilder):
-    def load_graph_and_format(self, prototxt_path: str, caffemodel_path: str) -> ppl_caffe_pb2.NetParameter:
+    def load_graph_and_format(
+        self, prototxt_path: str, caffemodel_path: str
+    ) -> ppl_caffe_pb2.NetParameter:
         if not is_file_exist(prototxt_path):
-            raise FileNotFoundError(f'file {prototxt_path} not exist, please check your file path')
+            raise FileNotFoundError(
+                f"file {prototxt_path} not exist, please check your file path"
+            )
         elif not is_file_exist(caffemodel_path):
-            raise FileNotFoundError(f'file {caffemodel_path} not existm please check your file path')
+            raise FileNotFoundError(
+                f"file {caffemodel_path} not existm please check your file path"
+            )
         network = ppl_caffe_pb2.NetParameter()
         with open(prototxt_path) as f:
             text_format.Merge(f.read(), network)
         weight = ppl_caffe_pb2.NetParameter()
-        with open(caffemodel_path, 'rb') as f:
+        with open(caffemodel_path, "rb") as f:
             weight.ParseFromString(f.read())
 
         network = de_inplace(network)
@@ -27,7 +34,7 @@ class CaffeParser(GraphBuilder):
         for i in network.layer:
             for j in weight.layer:
                 if i.name == j.name:
-                    i.ClearField('blobs')
+                    i.ClearField("blobs")
                     i.blobs.MergeFrom(j.blobs)
                     break
 
@@ -44,12 +51,18 @@ class CaffeParser(GraphBuilder):
         top_name_set = set()
         for layer in network.layer:
             if layer.type not in caffe_import_map:
-                logger.error(f'{layer.type} Caffe OP is not supported in PPQ import parser yet')
-                raise NotImplementedError(f'{layer.type} Caffe OP is not supported in PPQ import parser yet')
+                logger.error(
+                    f"{layer.type} Caffe OP is not supported in PPQ import parser yet"
+                )
+                raise NotImplementedError(
+                    f"{layer.type} Caffe OP is not supported in PPQ import parser yet"
+                )
             input_shape = [activation_shape[k] for k in layer.bottom]
             caffe_layer = caffe_import_map[layer.type](graph, layer, input_shape)
             graph = caffe_layer.trans()
-            activation_shape.update([(k, v) for k, v in zip(layer.top, caffe_layer.out_shape)])
+            activation_shape.update(
+                [(k, v) for k, v in zip(layer.top, caffe_layer.out_shape)]
+            )
 
             # statistic top_name and get final out var name
             for name in layer.bottom:
@@ -61,11 +74,13 @@ class CaffeParser(GraphBuilder):
         # add input and output for graph
         try:
             for var_name in input_names:
-                if var_name not in graph.variables: continue
+                if var_name not in graph.variables:
+                    continue
                 graph.inputs[var_name] = graph.variables[var_name]
             for var_name in top_name_set:
                 graph.outputs[var_name] = graph.variables[var_name]
         except KeyError as e:
             raise KeyError(
-                'seems you got an input/output variable that is not linked to any operation.')
+                "seems you got an input/output variable that is not linked to any operation."
+            )
         return graph

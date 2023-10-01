@@ -5,6 +5,7 @@ from .MyQuantizer import ExtQuantizer
 from .NXPQuantizer import NXP_Quantizer
 from .RKNNQuantizer import RKNN_PerChannelQuantizer, RKNN_PerTensorQuantizer
 from .PPLQuantizer import PPLCUDAQuantizer
+
 # from .TRTQuantizer import TensorRTQuantizer
 from .FPGAQuantizer import FPGAQuantizer
 from .NCNNQuantizer import NCNNQuantizer

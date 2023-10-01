@@ -23,51 +23,48 @@ FP16_MODE = True
 MODEL.eval()
 MODEL.cuda()
 
+
 def trace_handler(prof):
-    print(prof.key_averages().table(
-        sort_by="self_cuda_time_total", row_limit=-1))
+    print(prof.key_averages().table(sort_by="self_cuda_time_total", row_limit=-1))
+
 
 # Benckmark with pytorch
-for sample in tqdm(SAMPLES, desc='Torch Executing'):
+for sample in tqdm(SAMPLES, desc="Torch Executing"):
     MODEL.forward(sample.cuda())
 
 # Convert torch.nn.Module to tensorrt
 # 在转换过后，你模型中的执行函数将会被 trt 替换，同时进行图融合
 model_trt = torch2trt(MODEL, [sample.cuda()], fp16_mode=FP16_MODE)
-for sample in tqdm(SAMPLES, desc='TRT Executing'):
+for sample in tqdm(SAMPLES, desc="TRT Executing"):
     model_trt.forward(sample.cuda())
 
 # Test performance metrics using torch.profiler
 with torch.profiler.profile(
     activities=[
         torch.profiler.ProfilerActivity.CPU,
-        torch.profiler.ProfilerActivity.CUDA],
-    schedule=torch.profiler.schedule(
-        wait=2,
-        warmup=1,
-        active=7),
+        torch.profiler.ProfilerActivity.CUDA,
+    ],
+    schedule=torch.profiler.schedule(wait=2, warmup=1, active=7),
     on_trace_ready=trace_handler
     # on_trace_ready=torch.profiler.tensorboard_trace_handler('log')
     # used when outputting for tensorboard
-    ) as p:
-        for iter in range(10):
-            model_trt.forward(sample.cuda())
-            # send a signal to the profiler that the next iteration has started
-            p.step()
+) as p:
+    for iter in range(10):
+        model_trt.forward(sample.cuda())
+        # send a signal to the profiler that the next iteration has started
+        p.step()
 
 with torch.profiler.profile(
     activities=[
         torch.profiler.ProfilerActivity.CPU,
-        torch.profiler.ProfilerActivity.CUDA],
-    schedule=torch.profiler.schedule(
-        wait=2,
-        warmup=1,
-        active=7),
+        torch.profiler.ProfilerActivity.CUDA,
+    ],
+    schedule=torch.profiler.schedule(wait=2, warmup=1, active=7),
     on_trace_ready=trace_handler
     # on_trace_ready=torch.profiler.tensorboard_trace_handler('log')
     # used when outputting for tensorboard
-    ) as p:
-        for iter in range(10):
-            MODEL.forward(sample.cuda())
-            # send a signal to the profiler that the next iteration has started
-            p.step()
+) as p:
+    for iter in range(10):
+        MODEL.forward(sample.cuda())
+        # send a signal to the profiler that the next iteration has started
+        p.step()
