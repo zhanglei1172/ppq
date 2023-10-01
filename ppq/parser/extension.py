@@ -16,7 +16,13 @@ class ExtensionExporter(GraphExporter):
     def __init__(self) -> None:
         super().__init__()
 
-    def export(self, file_path: str, graph: BaseGraph, config_path: str = None):
+    def export(
+        self,
+        file_path: str,
+        graph: BaseGraph,
+        config_path: str = None,
+        **kwargs,
+    ):
         """Sample Export Function -- export all quantization params into txt"""
 
         if config_path is None:

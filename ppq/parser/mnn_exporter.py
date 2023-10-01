@@ -1,9 +1,10 @@
+import json
 import os
 from typing import List
-import json
 
 from ppq.core import NetworkFramework
 from ppq.IR import BaseGraph, GraphExporter
+
 from .caffe_exporter import CaffeExporter
 from .onnx_exporter import OnnxExporter
 
@@ -93,6 +94,7 @@ class MNNExporter(GraphExporter):
         graph: BaseGraph,
         config_path: str = None,
         input_shapes: List[List[int]] = [[1, 3, 224, 224]],
+        **kwargs,
     ):
         if graph._built_from == NetworkFramework.CAFFE:
             if config_path is not None:
@@ -104,10 +106,16 @@ class MNNExporter(GraphExporter):
                 graph=graph,
                 config_path=None,
                 input_shapes=input_shapes,
+                **kwargs,
             )
 
         elif graph._built_from == NetworkFramework.ONNX:
             if config_path is not None:
                 self.export_onnx_quantization_config(config_path, graph)
             exporter = OnnxExporter()
-            exporter.export(file_path=file_path, graph=graph, config_path=None)
+            exporter.export(
+                file_path=file_path,
+                graph=graph,
+                config_path=None,
+                **kwargs,
+            )

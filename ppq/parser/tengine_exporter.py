@@ -1,7 +1,9 @@
 import json
+
 import onnx
 import torch
 from onnx import helper, numpy_helper
+
 from ppq.core import (
     GRAPH_OPSET_ATTRIB,
     ONNX_EXPORT_OPSET,
@@ -204,7 +206,13 @@ class TengineExporter(GraphExporter):
             )
         return tensor_proto
 
-    def export(self, file_path: str, graph: BaseGraph, config_path: str = None):
+    def export(
+        self,
+        file_path: str,
+        graph: BaseGraph,
+        config_path: str = None,
+        **kwargs,
+    ):
         # during export we will remove all boundary operations from graph.
         # we do not want to change the structure of original graph,
         # so there have to take a clone of it.
@@ -260,4 +268,8 @@ class TengineExporter(GraphExporter):
         )
         onnx_model.ir_version = graph._detail.get("ir_version", ONNX_VERSION)
         # onnx.checker.check_model(onnx_model)
-        onnx.save(onnx_model, file_path)
+        onnx.save(
+            onnx_model,
+            file_path,
+            **kwargs,
+        )

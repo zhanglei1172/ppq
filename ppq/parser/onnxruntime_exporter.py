@@ -18,7 +18,7 @@ from ppq.IR import BaseGraph, Operation, QuantableOperation, QuantableVariable, 
 from ppq.quantization.qfunction.linear import PPQLinearQuant_toInt
 from ppq.utils.round import ppq_tensor_round
 
-from .onnx_exporter import OnnxExporter, OP_CONVERTERS, OperationExporter
+from .onnx_exporter import OP_CONVERTERS, OnnxExporter, OperationExporter
 
 
 class QDQHelper:
@@ -681,6 +681,7 @@ class ONNXRUNTIMExporter(OnnxExporter):
         quantized_param: bool = True,
         remove_activation: bool = True,
         save_as_external_data: bool = False,
+        **kwargs,
     ) -> None:
         """
         Export PPQ Graph to Onnx QDQ format.
@@ -784,6 +785,7 @@ class ONNXRUNTIMExporter(OnnxExporter):
             size_threshold=size_threshold,
             save_as_external_data=save_as_external_data,
             all_tensors_to_one_file=(not save_as_external_data),
+            **kwargs,
         )
 
         # Check Graph

@@ -51,7 +51,11 @@ class TensorRTExporter_QDQ(ONNXRUNTIMExporter):
     """
 
     def export(
-        self, file_path: str, graph: BaseGraph, save_as_external_data: bool = False
+        self,
+        file_path: str,
+        graph: BaseGraph,
+        save_as_external_data: bool = False,
+        **kwargs,
     ) -> None:
         # step 1, export onnx file.
         super().export(
@@ -60,6 +64,7 @@ class TensorRTExporter_QDQ(ONNXRUNTIMExporter):
             quantized_param=False,
             config_path=None,
             save_as_external_data=save_as_external_data,
+            **kwargs,
         )
 
 
@@ -142,6 +147,7 @@ class TensorRTExporter_JSON(GraphExporter):
         graph: BaseGraph,
         config_path: str = None,
         input_shapes: List[List[int]] = [[1, 3, 224, 224]],
+        **kwargs,
     ):
         ppq_info(
             "You are exporting PPQ Graph to TensorRT(Onnx + Json). \n"
@@ -155,7 +161,9 @@ class TensorRTExporter_JSON(GraphExporter):
         _, ext = os.path.splitext(file_path)
         if ext == ".onnx":
             exporter = OnnxExporter()
-            exporter.export(file_path=file_path, graph=graph, config_path=None)
+            exporter.export(
+                file_path=file_path, graph=graph, config_path=None, **kwargs
+            )
         elif ext in {".prototxt", ".caffemodel"}:
             exporter = CaffeExporter()
             exporter.export(
@@ -163,6 +171,7 @@ class TensorRTExporter_JSON(GraphExporter):
                 graph=graph,
                 config_path=None,
                 input_shapes=input_shapes,
+                **kwargs,
             )
 
         # no pre-determined export format, we export according to the
@@ -174,7 +183,10 @@ class TensorRTExporter_JSON(GraphExporter):
                 graph=graph,
                 config_path=None,
                 input_shapes=input_shapes,
+                **kwargs,
             )
         elif graph._built_from == NetworkFramework.ONNX:
             exporter = OnnxExporter()
-            exporter.export(file_path=file_path, graph=graph, config_path=None)
+            exporter.export(
+                file_path=file_path, graph=graph, config_path=None, **kwargs
+            )

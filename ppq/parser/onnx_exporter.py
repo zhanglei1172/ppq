@@ -5,6 +5,7 @@ import numpy as np
 import onnx
 import torch
 from onnx import helper, numpy_helper
+
 from ppq.core import (
     GRAPH_OPSET_ATTRIB,
     ONNX_EXPORT_OPSET,
@@ -297,6 +298,7 @@ class OnnxExporter(GraphExporter):
         graph: BaseGraph,
         config_path: str = None,
         save_as_external_data: bool = False,
+        **kwargs,
     ):
         # during export we will remove all boundary operations from graph.
         # we do not want to change the structure of original graph,
@@ -314,4 +316,5 @@ class OnnxExporter(GraphExporter):
             size_threshold=size_threshold,
             save_as_external_data=save_as_external_data,
             all_tensors_to_one_file=(not save_as_external_data),
+            **kwargs,
         )

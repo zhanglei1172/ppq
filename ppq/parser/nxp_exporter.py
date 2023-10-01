@@ -1,5 +1,6 @@
 import onnx
 from onnx import helper, numpy_helper
+
 from ppq.core import NetworkFramework, QuantizationStates, convert_any_to_numpy
 from ppq.IR import BaseGraph, GraphExporter, Operation, QuantableVariable, Variable
 
@@ -17,7 +18,7 @@ class NxpExporter(GraphExporter):
             inputs=[_.name for _ in operation.inputs],
             outputs=[_.name for _ in operation.outputs],
             name=operation.name,
-            **operation.attributes
+            **operation.attributes,
         )
         return op_proto
 
@@ -49,6 +50,7 @@ class NxpExporter(GraphExporter):
         graph: BaseGraph,
         config_path: str = None,
         export_param: bool = False,
+        **kwargs,
     ):
         onnx_graph = onnx.GraphProto()
         onnx_graph.name = graph._name
@@ -106,4 +108,4 @@ class NxpExporter(GraphExporter):
 
         onnx_model = helper.make_model(onnx_graph)
         # onnx.checker.check_model(onnx_model)
-        onnx.save(onnx_model, file_path)
+        onnx.save(onnx_model, file_path, **kwargs)

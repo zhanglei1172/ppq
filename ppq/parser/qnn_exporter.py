@@ -1,19 +1,20 @@
 import json
-import torch
 from typing import List
+
+import torch
 
 from ppq.core import (
     DataType,
+    NetworkFramework,
     QuantizationStates,
     QuantizationVisibility,
-    NetworkFramework,
     ppq_warning,
 )
 from ppq.IR import BaseGraph, GraphExporter
 from ppq.IR.quantize import QuantableOperation
 
-from .onnx_exporter import OnnxExporter
 from .caffe_exporter import CaffeExporter
+from .onnx_exporter import OnnxExporter
 from .util import convert_value
 
 
@@ -90,6 +91,7 @@ class QNNDSPExporter(GraphExporter):
         graph: BaseGraph,
         config_path: str = None,
         input_shapes: List[List[int]] = [[1, 3, 224, 224]],
+        **kwargs,
     ):
         if config_path is not None:
             self.export_quantization_config(config_path, graph)
@@ -100,7 +102,13 @@ class QNNDSPExporter(GraphExporter):
                 graph=graph,
                 config_path=None,
                 input_shapes=input_shapes,
+                **kwargs,
             )
         elif graph._built_from == NetworkFramework.ONNX:
             exporter = OnnxExporter()
-            exporter.export(file_path=file_path, graph=graph, config_path=None)
+            exporter.export(
+                file_path=file_path,
+                graph=graph,
+                config_path=None,
+                **kwargs,
+            )

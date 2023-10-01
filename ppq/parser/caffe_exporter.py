@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import List
 
 import torch
+
 from ppq.core import (
     PPQ_CONFIG,
     DataType,
@@ -200,6 +201,7 @@ class CaffeExporter(GraphExporter):
         graph: BaseGraph,
         config_path: str = None,
         input_shapes: List[List[int]] = [[1, 3, 224, 224]],
+        **kwargs,
     ):
         # dump config
         if config_path is not None:
@@ -286,6 +288,7 @@ class SNPECaffeExporter(CaffeExporter):
         graph: BaseGraph,
         config_path: str = None,
         input_shapes: List[List[int]] = [[1, 3, 224, 224]],
+        **kwargs,
     ):
         # dump config
         if config_path is not None:
@@ -322,6 +325,7 @@ class PPLDSPCaffeExporter(CaffeExporter):
         config_path: str = None,
         input_shapes: List[List[int]] = [[1, 3, 224, 224]],
         write_weight=False,
+        **kwargs,
     ):
         # PPL3 DSP do not need a json config file, all quantization configuration will be merged into protobuf
         caffe_model, caffe_proto = self.prepare_model(graph, input_shapes)
@@ -601,6 +605,7 @@ class PPLDSPTICaffeExporter(CaffeExporter):
         config_path: str = None,
         input_shapes: List[List[int]] = [[1, 3, 224, 224]],
         write_weight=False,
+        **kwargs,
     ):
         # PPL3 DSP TI do not need a json config file, all quantization configuration will be merged into protobuf
         # DSP TI differs from DSP in the perchannel quantization param for computing ops

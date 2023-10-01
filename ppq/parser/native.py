@@ -15,6 +15,7 @@ class NativeExporter(GraphExporter):
         graph: BaseGraph,
         config_path: str = None,
         dump_value: bool = True,
+        **kwargs,
     ):
         def dump_elements_to_file(file, elements: list):
             for element in elements:

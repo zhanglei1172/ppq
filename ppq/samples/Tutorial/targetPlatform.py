@@ -2,6 +2,7 @@ from typing import Iterable
 
 import torch
 import torchvision
+
 from ppq import BaseQuantizer, Operation, OperationQuantizationConfig, TargetPlatform
 from ppq.api import (
     ENABLE_CUDA_KERNEL,
@@ -172,7 +173,11 @@ class MyExporter(OnnxExporter):
         # ------------------------------------------------------------
         # 最后我们导出完整的计算图到 onnx
         # ------------------------------------------------------------
-        onnx.save(self.export_graph(graph=graph), file_path)
+        onnx.save(
+            self.export_graph(graph=graph),
+            file_path,
+            **kwargs,
+        )
 
 
 # ------------------------------------------------------------
