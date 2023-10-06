@@ -1,6 +1,7 @@
 from typing import Tuple
 
 import torch
+
 from ppq.core import (
     CUDA,
     OBSERVER_KL_COMPUTING_DEVICE,

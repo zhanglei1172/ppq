@@ -21,22 +21,21 @@ import os
 import sys
 import time
 from collections import defaultdict
-from typing import Iterable, Callable
+from typing import Callable, Iterable
 
 import pycuda.driver as cuda
 import tensorrt as trt
 import torch
-from tqdm import tqdm
-
-from ppq.api import ENABLE_CUDA_KERNEL
 from ppq import (
+    TorchExecutor,
     convert_any_to_numpy,
     convert_any_to_torch_tensor,
-    TorchExecutor,
     torch_snr_error,
 )
+from ppq.api import ENABLE_CUDA_KERNEL
 from ppq.IR import BaseGraph
 from ppq.quantization.analyse.util import MeasurePrinter
+from tqdm import tqdm
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("EngineBuilder").setLevel(logging.INFO)
@@ -370,6 +369,7 @@ def Profiling(engine_file: str, steps: int = 1000):
                 stream=stream,
             )
         context.profiler.report()
+    return context.profiler.recorder
 
 
 def TestAlignment(
