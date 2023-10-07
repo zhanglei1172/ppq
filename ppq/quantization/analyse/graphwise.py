@@ -512,6 +512,13 @@ def graphwise_error_analyse_v2(
     if len(interested_op) == 0:
         print("Oops. you got nothing to analyse.")
         return
+    interested_op_ = []
+    for operation in interested_op:
+        if isinstance(operation, str):
+            interested_op_.append(graph.operations[operation])
+        else:
+            interested_op_.append(operation)
+    interested_op = interested_op_
 
     # set up all hooks.
     recorders, hooks, caches = {}, {}, {}
