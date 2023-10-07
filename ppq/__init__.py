@@ -40,6 +40,7 @@ from ppq.IR.search import SearchableGraph
 from ppq.log import NaiveLogger
 from ppq.quantization.analyse import (
     graphwise_error_analyse,
+    graphwise_error_analyse_v2,
     layerwise_error_analyse,
     parameter_analyse,
     statistical_analyse,
