@@ -243,6 +243,7 @@ def build_engine(
     int8_scale_file: str = None,
     explicit_batch: bool = True,
     workspace: int = 4294967296,  # 4GB
+    external_data=False,
 ):
     TRT_LOGGER = trt.Logger()
     """
@@ -277,9 +278,9 @@ def build_engine(
 
     if not os.path.exists(onnx_file):
         raise FileNotFoundError(f"ONNX file {onnx_file} not found")
-
+    path = onnx_file if external_data else None
     with open(onnx_file, "rb") as model:
-        if not parser.parse(model.read()):
+        if not parser.parse(model.read(), path=path):
             print("ERROR: Failed to parse the ONNX file.")
             for error in range(parser.num_errors):
                 print(parser.get_error(error))

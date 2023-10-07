@@ -1,6 +1,7 @@
-import os
-import json
 import argparse
+import json
+import os
+
 import tensorrt as trt
 
 TRT_LOGGER = trt.Logger()
@@ -46,7 +47,7 @@ def setDynamicRange(network, json_file):
                 print("\033[1;32m%s\033[0m" % tensor.name)
 
 
-def build_engine(onnx_file, json_file, engine_file):
+def build_engine(onnx_file, json_file, engine_file, external_data=False):
     builder = trt.Builder(TRT_LOGGER)
     network = builder.create_network(EXPLICIT_BATCH)
 
@@ -62,9 +63,9 @@ def build_engine(onnx_file, json_file, engine_file):
 
     if not os.path.exists(onnx_file):
         quit("ONNX file {} not found".format(onnx_file))
-
+    path = onnx_file if external_data else None
     with open(onnx_file, "rb") as model:
-        if not parser.parse(model.read()):
+        if not parser.parse(model.read(), path=path):
             print("ERROR: Failed to parse the ONNX file.")
             for error in range(parser.num_errors):
                 print(parser.get_error(error))
