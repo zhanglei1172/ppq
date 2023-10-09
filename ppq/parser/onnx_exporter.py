@@ -86,7 +86,7 @@ OP_CONVERTERS = {
     "QLinearMul": OOSExporter,
     "QLinearReduceMean": OOSExporter,
     "QLinearSigmoid": OOSExporter,
-    # 'PPQBiasFusedMatMul': PPQBiasFusedMatMulExporter
+    'PPQBiasFusedMatMul': PPQBiasFusedMatMulExporter
 }
 
 
@@ -298,6 +298,7 @@ class OnnxExporter(GraphExporter):
         graph: BaseGraph,
         config_path: str = None,
         save_as_external_data: bool = False,
+        size_threshold: int = 1024,
         **kwargs,
     ):
         # during export we will remove all boundary operations from graph.
@@ -309,7 +310,6 @@ class OnnxExporter(GraphExporter):
         if config_path is not None:
             self.export_quantization_config(config_path, graph)
 
-        size_threshold = 0 if save_as_external_data else 1024
         onnx.save(
             self.export_graph(graph=graph),
             file_path,

@@ -778,7 +778,11 @@ class ONNXRUNTIMExporter(OnnxExporter):
         )
         onnx_model.ir_version = 7
         # onnx.checker.check_model(onnx_model)
-        size_threshold = 0 if save_as_external_data else 1024
+        if "size_threshold" in kwargs:
+            size_threshold = kwargs.pop("size_threshold")
+        else:
+            size_threshold = 0 if save_as_external_data else 1024
+
         onnx.save(
             onnx_model,
             file_path,

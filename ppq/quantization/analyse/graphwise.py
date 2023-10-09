@@ -523,7 +523,7 @@ def graphwise_error_analyse_v2(
     # set up all hooks.
     recorders, hooks, caches = {}, {}, {}
     for operation in interested_op:
-        if isinstance(operation, QuantableOperation):
+        if isinstance(operation, Operation):
             if operation.num_of_output > 1:
                 ppq_warning(
                     f"Operation {operation.name} has more than 1 output, "
@@ -582,7 +582,7 @@ def graphwise_error_analyse_v2(
 
     results = {}
     for operation in interested_op:
-        assert isinstance(operation, QuantableOperation)
+        assert isinstance(operation, Operation)
         results[operation.name] = recorders[operation.name].measure
 
     if verbose:
