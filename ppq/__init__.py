@@ -31,8 +31,8 @@ from ppq.IR import (
     Operation,
     QuantableGraph,
     SearchableGraph,
-    Variable,
     TrainableGraph,
+    Variable,
 )
 from ppq.IR.deploy import RunnableGraph
 from ppq.IR.quantize import QuantableOperation, QuantableVariable
@@ -45,6 +45,7 @@ from ppq.quantization.analyse import (
     parameter_analyse,
     statistical_analyse,
     variable_analyse,
+    variable_analyse_get,
 )
 from ppq.quantization.measure import (
     torch_cosine_similarity,

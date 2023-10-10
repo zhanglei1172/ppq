@@ -75,6 +75,7 @@ def graphwise_error_analyse(
     steps: int = 8,
     verbose: bool = True,
     fetchs: int = 4096,
+    flatten_start_dim=1,
 ) -> Dict[str, float]:
     """Measure the difference from a quantized graph to its dequantized graph.
 
@@ -142,7 +143,9 @@ def graphwise_error_analyse(
                     "analyser will process the first output of it."
                 )
 
-            recorders[operation.name] = MeasureRecorder(measurement=method)
+            recorders[operation.name] = MeasureRecorder(
+                measurement=method, flatten_start_dim=flatten_start_dim
+            )
             hooks[operation.name] = OutputRecorder(operation=operation, fetchs=fetchs)
             caches[operation.name] = []
 
@@ -452,6 +455,7 @@ def graphwise_error_analyse_v2(
     steps: int = 8,
     verbose: bool = True,
     fetchs: int = 4096,
+    flatten_start_dim: int = 1,
 ) -> Dict[str, float]:
     """Measure the difference from a quantized graph to its dequantized graph.
 
@@ -530,7 +534,9 @@ def graphwise_error_analyse_v2(
                     "analyser will process the first output of it."
                 )
 
-            recorders[operation.name] = MeasureRecorder(measurement=method)
+            recorders[operation.name] = MeasureRecorder(
+                measurement=method, flatten_start_dim=flatten_start_dim
+            )
             hooks[operation.name] = OutputRecorder(operation=operation, fetchs=fetchs)
             caches[operation.name] = []
 

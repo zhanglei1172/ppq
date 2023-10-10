@@ -2,12 +2,13 @@ from collections import defaultdict
 from typing import Callable, Dict, Iterable, List, Union
 
 import torch
+from tqdm import tqdm
+
 from ppq.core import convert_any_to_numpy
 from ppq.executor import TorchExecutor
 from ppq.IR import BaseGraph, QuantableOperation
 from ppq.IR.quantize import QuantableGraph
 from ppq.utils.fetch import tensor_random_fetch
-from tqdm import tqdm
 
 from .util import MeasurePrinter, MeasureRecorder
 
@@ -21,6 +22,7 @@ def layerwise_error_analyse(
     method: str = "snr",
     steps: int = 8,
     verbose: bool = True,
+    flatten_start_dim: int = 1,
 ) -> Dict[str, tuple]:
     """Measure the quantization error of each operation A dictionary contains
     output differences for all operation will be returned as a result.
@@ -91,7 +93,9 @@ def layerwise_error_analyse(
     recorders = {}
     for operation in quantable_operations:
         if isinstance(operation, QuantableOperation):
-            recorders[operation.name] = MeasureRecorder(measurement=method)
+            recorders[operation.name] = MeasureRecorder(
+                measurement=method, flatten_start_dim=flatten_start_dim
+            )
 
     # run for each quantable operations:
     for operation in tqdm(
@@ -175,7 +179,7 @@ def variable_analyse(
         if idx >= steps:
             break
 
-    for name in interested_outputs:
+    for i, name in enumerate(interested_outputs):
         tensor = torch.cat(data_collector[name]).flatten()
         tensor = convert_any_to_numpy(tensor)
 
@@ -183,7 +187,6 @@ def variable_analyse(
             from matplotlib import pyplot as plt
         except ImportError as e:
             raise Exception("Install matplotlib before using this function.")
-
         plt.figure(figsize=[12, 8])
         plt.title(f"Histogram Result of Variable {name}:")
         plt.hist(tensor, bins=64)
@@ -191,6 +194,44 @@ def variable_analyse(
 
     if dequantize:
         quant_graph.restore_quantize_state()
+
+
+def variable_analyse_get(
+    graph: BaseGraph,
+    dataloader: Iterable,
+    interested_outputs: Union[str, List[str]],
+    collate_fn: Callable = None,
+    running_device="cuda",
+    samples_per_step: int = 65536,
+    steps: int = 8,
+    dequantize: bool = False,
+):
+    quant_graph = QuantableGraph(graph)
+
+    executor = TorchExecutor(graph=graph, device=running_device)
+    if dequantize:
+        quant_graph.dequantize_graph()
+
+    data_collector = defaultdict(list)
+    for idx, batch in enumerate(dataloader):
+        if collate_fn is not None:
+            batch = collate_fn(batch)
+        fp_outputs = executor.forward(inputs=batch, output_names=interested_outputs)
+        for output, output_name in zip(fp_outputs, interested_outputs):
+            data_collector[output_name].append(output)
+        if idx >= steps:
+            break
+
+    ret_tensors = []
+    for i, name in enumerate(interested_outputs):
+        tensor = torch.stack(data_collector[name], dim=0).mean(axis=0)
+        tensor = convert_any_to_numpy(tensor)
+        ret_tensors.append(tensor)
+
+    if dequantize:
+        quant_graph.restore_quantize_state()
+
+    return ret_tensors
 
 
 def parameter_analyse(graph: BaseGraph):

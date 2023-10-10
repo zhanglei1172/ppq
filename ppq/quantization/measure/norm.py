@@ -2,7 +2,10 @@ import torch
 
 
 def torch_mean_square_error(
-    y_pred: torch.Tensor, y_real: torch.Tensor, reduction: str = "mean"
+    y_pred: torch.Tensor,
+    y_real: torch.Tensor,
+    reduction: str = "mean",
+    flatten_start_dim=1,
 ) -> torch.Tensor:
     """
     Compute mean square error between y_pred(tensor) and y_real(tensor)
@@ -42,7 +45,7 @@ def torch_mean_square_error(
         y_pred = y_pred.unsqueeze(0)
         y_real = y_real.unsqueeze(0)
 
-    diff = torch.pow(y_pred - y_real, 2).flatten(start_dim=1)
+    diff = torch.pow(y_pred - y_real, 2).flatten(start_dim=flatten_start_dim)
     mse = torch.mean(diff, dim=-1)
 
     if reduction == "mean":
@@ -56,7 +59,10 @@ def torch_mean_square_error(
 
 
 def torch_snr_error(
-    y_pred: torch.Tensor, y_real: torch.Tensor, reduction: str = "mean"
+    y_pred: torch.Tensor,
+    y_real: torch.Tensor,
+    reduction: str = "mean",
+    flatten_start_dim=1,
 ) -> torch.Tensor:
     """
     Compute SNR between y_pred(tensor) and y_real(tensor)
@@ -92,8 +98,8 @@ def torch_snr_error(
         y_pred = y_pred.unsqueeze(0)
         y_real = y_real.unsqueeze(0)
 
-    y_pred = y_pred.flatten(start_dim=1)
-    y_real = y_real.flatten(start_dim=1)
+    y_pred = y_pred.flatten(start_dim=flatten_start_dim)
+    y_real = y_real.flatten(start_dim=flatten_start_dim)
 
     noise_power = torch.pow(y_pred - y_real, 2).sum(dim=-1)
     signal_power = torch.pow(y_real, 2).sum(dim=-1)

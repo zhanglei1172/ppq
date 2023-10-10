@@ -4,7 +4,10 @@ from numpy.linalg import norm
 
 
 def torch_cosine_similarity(
-    y_pred: torch.Tensor, y_real: torch.Tensor, reduction: str = "mean"
+    y_pred: torch.Tensor,
+    y_real: torch.Tensor,
+    reduction: str = "mean",
+    flatten_start_dim=1,
 ) -> torch.Tensor:
     if y_pred.shape != y_real.shape:
         raise ValueError(
@@ -17,8 +20,8 @@ def torch_cosine_similarity(
         y_pred = y_pred.unsqueeze(0)
         y_real = y_real.unsqueeze(0)
 
-    y_pred = y_pred.flatten(start_dim=1).float()
-    y_real = y_real.flatten(start_dim=1).float()
+    y_pred = y_pred.flatten(start_dim=flatten_start_dim).float()
+    y_real = y_real.flatten(start_dim=flatten_start_dim).float()
 
     cosine_sim = torch.cosine_similarity(y_pred, y_real, dim=-1)
 

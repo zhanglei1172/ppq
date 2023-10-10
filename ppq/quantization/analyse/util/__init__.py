@@ -10,7 +10,9 @@ from ppq.quantization.measure.norm import torch_mean_square_error, torch_snr_err
 class MeasureRecorder:
     """Helper class for collecting data."""
 
-    def __init__(self, measurement: str = "cosine", reduce: str = "mean") -> None:
+    def __init__(
+        self, measurement: str = "cosine", reduce: str = "mean", flatten_start_dim=1
+    ) -> None:
         self.num_of_elements = 0
         self.measure = 0
         if reduce not in {"mean", "max"}:
@@ -19,11 +21,21 @@ class MeasureRecorder:
             )
 
         if str(measurement).lower() == "cosine":
-            measure_fn = partial(torch_cosine_similarity, reduction=reduce)
+            measure_fn = partial(
+                torch_cosine_similarity,
+                reduction=reduce,
+                flatten_start_dim=flatten_start_dim,
+            )
         elif str(measurement).lower() == "mse":
-            measure_fn = partial(torch_mean_square_error, reduction=reduce)
+            measure_fn = partial(
+                torch_mean_square_error,
+                reduction=reduce,
+                flatten_start_dim=flatten_start_dim,
+            )
         elif str(measurement).lower() == "snr":
-            measure_fn = partial(torch_snr_error, reduction=reduce)
+            measure_fn = partial(
+                torch_snr_error, reduction=reduce, flatten_start_dim=flatten_start_dim
+            )
         else:
             raise ValueError(
                 "Unsupported measurement detected. "
