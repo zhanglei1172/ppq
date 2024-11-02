@@ -1060,7 +1060,8 @@ def Transpose_forward(
         torch.Tensor: [description]
     """
     ASSERT_NUM_OF_INPUT(op=op, values=values, min_num_of_input=1, max_num_of_input=1)
-    perm = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="perm", compulsive=True)
+    # perm = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="perm", compulsive=True)
+    perm = GET_ATTRIBUTE_FROM_OPERATION(op=op, attribute="perm", default=[1,0])
     [data] = values
     output = data.permute(perm)
     return output
@@ -1661,7 +1662,7 @@ def Slice_forward(
     axes = (
         values[3]
         if len(values) > 3
-        else torch.tensor([int(_) for idx, _ in enumerate(starts.tolist())])
+        else torch.tensor([int(idx) for idx, _ in enumerate(starts.tolist())])
     )
     steps = values[4] if len(values) > 4 else torch.ones_like(starts)
     if axes is not None:

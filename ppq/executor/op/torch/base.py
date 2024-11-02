@@ -16,7 +16,7 @@ def ASSERT_NUM_OF_INPUT(
     op: Operation,
     values: List[torch.Tensor],
     min_num_of_input: int = -1,
-    max_num_of_input: int = 99,
+    max_num_of_input: int = 999,
 ):
     if min_num_of_input == max_num_of_input:
         if len(values) != min_num_of_input:

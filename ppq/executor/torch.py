@@ -515,104 +515,104 @@ class TorchExecutor(BaseGraphExecutor, torch.nn.Module):
                 result_collector[output_names.index(name)] = inputs[name]
 
         for operation in executing_order[:last_idx]:
-            try:
-                assert isinstance(
-                    operation, Operation
-                ), "Oops, seems you got something weird in your graph"
-                assert isinstance(operation.platform, TargetPlatform), (
-                    f"Operation {operation.name} has an invalid platform setting, "
-                    f"only PPQ.core.TargetPlatform is expected here, while {type(operation.platform)} was given"
+            # try:
+            assert isinstance(
+                operation, Operation
+            ), "Oops, seems you got something weird in your graph"
+            assert isinstance(operation.platform, TargetPlatform), (
+                f"Operation {operation.name} has an invalid platform setting, "
+                f"only PPQ.core.TargetPlatform is expected here, while {type(operation.platform)} was given"
+            )
+            platform_dispatching_table = OPERATION_FORWARD_TABLE[operation.platform]
+            if operation.type not in platform_dispatching_table:
+                raise NotImplementedError(
+                    f"Graph op: {operation.name}({operation.type}) "
+                    f"has no backend implementation on target platform {operation.platform}. "
+                    "Register this op to ppq.executor.base.py and ppq.executor.op first"
                 )
-                platform_dispatching_table = OPERATION_FORWARD_TABLE[operation.platform]
-                if operation.type not in platform_dispatching_table:
-                    raise NotImplementedError(
-                        f"Graph op: {operation.name}({operation.type}) "
-                        f"has no backend implementation on target platform {operation.platform}. "
-                        "Register this op to ppq.executor.base.py and ppq.executor.op first"
+            operation_forward_func = platform_dispatching_table[operation.type]
+            operation_runtime_hook = (
+                hooks[operation.name]
+                if (hooks is not None) and (operation.name in hooks)
+                else None
+            )
+            inputs = [var.value for var in operation.inputs]
+
+            # if operation is an QuantableOperation, we have to quant its inputs and outputs at first.
+            if isinstance(operation, QuantableOperation):
+                input_configs = [
+                    _ for _ in operation.config.input_quantization_config
+                ]
+                inputs = [
+                    self.quantize_function(input, config)
+                    for input, config in zip(inputs, input_configs)
+                ]
+
+            # PATCH 20220208
+            for idx, var in enumerate(operation.inputs):
+                if var.name in output_names:
+                    result_collector[output_names.index(var.name)] = inputs[idx]
+
+            # invoking pre-forward hook
+            if operation_runtime_hook is not None:
+                if isinstance(operation_runtime_hook, QuantOPRuntimeHook):
+                    inputs = operation_runtime_hook.pre_forward_hook(
+                        inputs=[var.value for var in operation.inputs],
+                        quant_inputs=inputs,
+                        quant_configs=input_configs,
                     )
-                operation_forward_func = platform_dispatching_table[operation.type]
-                operation_runtime_hook = (
-                    hooks[operation.name]
-                    if (hooks is not None) and (operation.name in hooks)
-                    else None
-                )
-                inputs = [var.value for var in operation.inputs]
+                elif isinstance(operation_runtime_hook, RuntimeHook):
+                    inputs = operation_runtime_hook.pre_forward_hook(inputs=inputs)
+                else:
+                    raise TypeError(
+                        f"invalid hook instance was given with operation: {operation}"
+                    )
 
-                # if operation is an QuantableOperation, we have to quant its inputs and outputs at first.
-                if isinstance(operation, QuantableOperation):
-                    input_configs = [
-                        _ for _ in operation.config.input_quantization_config
-                    ]
-                    inputs = [
-                        self.quantize_function(input, config)
-                        for input, config in zip(inputs, input_configs)
-                    ]
+            # forward and collecting result
+            outputs = operation_forward_func(
+                operation, inputs, self._executing_context
+            )
+            outputs = outputs if isinstance(outputs, (list, tuple)) else [outputs]
+            fp_outputs = outputs
 
-                # PATCH 20220208
-                for idx, var in enumerate(operation.inputs):
-                    if var.name in output_names:
-                        result_collector[output_names.index(var.name)] = inputs[idx]
+            # quantize all result if is necessary
+            if isinstance(operation, QuantableOperation):
+                output_configs = [
+                    _ for _ in operation.config.output_quantization_config
+                ]
+                outputs = [
+                    self.quantize_function(output, config)
+                    for output, config in zip(outputs, output_configs)
+                ]
 
-                # invoking pre-forward hook
-                if operation_runtime_hook is not None:
-                    if isinstance(operation_runtime_hook, QuantOPRuntimeHook):
-                        inputs = operation_runtime_hook.pre_forward_hook(
-                            inputs=[var.value for var in operation.inputs],
-                            quant_inputs=inputs,
-                            quant_configs=input_configs,
-                        )
-                    elif isinstance(operation_runtime_hook, RuntimeHook):
-                        inputs = operation_runtime_hook.pre_forward_hook(inputs=inputs)
-                    else:
-                        raise TypeError(
-                            f"invalid hook instance was given with operation: {operation}"
-                        )
+            # invoking post-forward hook
+            if operation_runtime_hook is not None:
+                if isinstance(operation_runtime_hook, QuantOPRuntimeHook):
+                    outputs = operation_runtime_hook.post_forward_hook(
+                        outputs=fp_outputs,
+                        quant_outputs=outputs,
+                        quant_configs=output_configs,
+                    )
+                elif isinstance(operation_runtime_hook, RuntimeHook):
+                    outputs = operation_runtime_hook.post_forward_hook(
+                        outputs=outputs
+                    )
+                else:
+                    raise TypeError(
+                        f"invalid hook instance was given with operation: {operation}"
+                    )
 
-                # forward and collecting result
-                outputs = operation_forward_func(
-                    operation, inputs, self._executing_context
-                )
-                outputs = outputs if isinstance(outputs, (list, tuple)) else [outputs]
-                fp_outputs = outputs
+            # feed value to graph variables.
+            for output_idx, output_var in enumerate(operation.outputs):
+                output_var = operation.outputs[output_idx]
+                output_var.value = outputs[output_idx]
 
-                # quantize all result if is necessary
-                if isinstance(operation, QuantableOperation):
-                    output_configs = [
-                        _ for _ in operation.config.output_quantization_config
-                    ]
-                    outputs = [
-                        self.quantize_function(output, config)
-                        for output, config in zip(outputs, output_configs)
-                    ]
-
-                # invoking post-forward hook
-                if operation_runtime_hook is not None:
-                    if isinstance(operation_runtime_hook, QuantOPRuntimeHook):
-                        outputs = operation_runtime_hook.post_forward_hook(
-                            outputs=fp_outputs,
-                            quant_outputs=outputs,
-                            quant_configs=output_configs,
-                        )
-                    elif isinstance(operation_runtime_hook, RuntimeHook):
-                        outputs = operation_runtime_hook.post_forward_hook(
-                            outputs=outputs
-                        )
-                    else:
-                        raise TypeError(
-                            f"invalid hook instance was given with operation: {operation}"
-                        )
-
-                # feed value to graph variables.
-                for output_idx, output_var in enumerate(operation.outputs):
-                    output_var = operation.outputs[output_idx]
-                    output_var.value = outputs[output_idx]
-
-                    if output_var.name in output_names:
-                        result_collector[output_names.index(output_var.name)] = outputs[
-                            output_idx
+                if output_var.name in output_names:
+                    result_collector[output_names.index(output_var.name)] = outputs[
+                        output_idx
                         ]
-            except Exception as _:
-                raise RuntimeError(f"Op Execution Error: {str(operation)}") from _
+            # except Exception as _:
+            #     raise RuntimeError(f"Op Execution Error: {str(operation)}") from _
 
             # remove useless value(runtime clear).
             visited_op.append(operation)
@@ -710,7 +710,7 @@ class TorchExecutor(BaseGraphExecutor, torch.nn.Module):
 
             feed_dict[var_name] = (
                 torch.Tensor(size=input_var.shape, device="cpu")
-                .fill_(0)
+                .fill_(1)
                 .type(dtype=DataType.to_torch(input_var.dtype))
                 .to(self._device)
             )
