@@ -20,9 +20,11 @@ def layerwise_error_analyse(
     collate_fn: Callable = None,
     running_device="cuda",
     method: str = "snr",
+    reduce_method: str = "mean",
     steps: int = 8,
     verbose: bool = True,
     flatten_start_dim: int = 1,
+    delegates: Dict[str, Callable] = None,
 ) -> Dict[str, tuple]:
     """Measure the quantization error of each operation A dictionary contains
     output differences for all operation will be returned as a result.
@@ -78,6 +80,9 @@ def layerwise_error_analyse(
         interested_outputs = [interested_outputs]
 
     executor = TorchExecutor(graph=graph, device=running_device)
+    if delegates:
+        for name, delegate in delegates.items():
+            executor.register_quantize_delegate(name, delegate)
 
     # find all quantable operations.
     quantable_operations = []
@@ -94,7 +99,8 @@ def layerwise_error_analyse(
     for operation in quantable_operations:
         if isinstance(operation, QuantableOperation):
             recorders[operation.name] = MeasureRecorder(
-                measurement=method, flatten_start_dim=flatten_start_dim
+                measurement=method, flatten_start_dim=flatten_start_dim,
+                reduce=reduce_method,
             )
 
     # run for each quantable operations:
@@ -158,10 +164,14 @@ def variable_analyse(
     samples_per_step: int = 65536,
     steps: int = 8,
     dequantize: bool = False,
+    delegates: Dict[str, Callable] = None,
 ):
     quant_graph = QuantableGraph(graph)
 
     executor = TorchExecutor(graph=graph, device=running_device)
+    if delegates:
+        for name, delegate in delegates.items():
+            executor.register_quantize_delegate(name, delegate)
     if dequantize:
         quant_graph.dequantize_graph()
 
@@ -205,10 +215,14 @@ def variable_analyse_get(
     samples_per_step: int = 65536,
     steps: int = 8,
     dequantize: bool = False,
+    delegates: Dict[str, Callable] = None,
 ):
     quant_graph = QuantableGraph(graph)
 
     executor = TorchExecutor(graph=graph, device=running_device)
+    if delegates:
+        for name, delegate in delegates.items():
+            executor.register_quantize_delegate(name, delegate)
     if dequantize:
         quant_graph.dequantize_graph()
 

@@ -4,7 +4,7 @@ import math
 import torch
 from ppq.core.defs import ppq_warning
 from ppq.quantization.measure.cosine import torch_cosine_similarity
-from ppq.quantization.measure.norm import torch_mean_square_error, torch_snr_error
+from ppq.quantization.measure.norm import torch_mean_square_error, torch_snr_error, torch_rel_diff_error
 
 
 class MeasureRecorder:
@@ -36,6 +36,9 @@ class MeasureRecorder:
             measure_fn = partial(
                 torch_snr_error, reduction=reduce, flatten_start_dim=flatten_start_dim
             )
+        elif str(measurement).lower() == "rel_diff":
+            measure_fn = partial(
+                torch_rel_diff_error, reduction=reduce, flatten_start_dim=flatten_start_dim)
         else:
             raise ValueError(
                 "Unsupported measurement detected. "
@@ -62,6 +65,7 @@ class MeasureRecorder:
         if self.reduce == "max":
             self.measure = max(self.measure, result)
             self.num_of_elements += elements
+        
 
 
 class MeasurePrinter:

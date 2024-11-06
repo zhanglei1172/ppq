@@ -17,8 +17,8 @@ def torch_cosine_similarity(
     reduction = str(reduction).lower()
 
     if y_pred.ndim == 1:
-        y_pred = y_pred.unsqueeze(0)
-        y_real = y_real.unsqueeze(0)
+        y_pred = y_pred.unsqueeze(1)
+        y_real = y_real.unsqueeze(1)
 
     y_pred = y_pred.flatten(start_dim=flatten_start_dim).float()
     y_real = y_real.flatten(start_dim=flatten_start_dim).float()
@@ -31,6 +31,8 @@ def torch_cosine_similarity(
         return torch.sum(cosine_sim)
     elif reduction == "none":
         return cosine_sim
+    elif reduction == "max":
+        return torch.max(cosine_sim)
     else:
         raise ValueError(f"Unsupported reduction method.")
 

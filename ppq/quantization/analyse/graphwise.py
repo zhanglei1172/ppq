@@ -72,10 +72,12 @@ def graphwise_error_analyse(
     dataloader: Iterator,
     collate_fn: Callable = None,
     method: str = "snr",
+    reduce_method: str = "mean",
     steps: int = 8,
     verbose: bool = True,
     fetchs: int = 4096,
     flatten_start_dim=1,
+    delegates=None,
 ) -> Dict[str, float]:
     """Measure the difference from a quantized graph to its dequantized graph.
 
@@ -122,6 +124,9 @@ def graphwise_error_analyse(
         Result is like: {'operation name 1': 0.933, 'operation name 2': 0.926}
     """
     executor = TorchExecutor(graph=graph, device=running_device)
+    if delegates:
+        for name, delegate in delegates.items():
+            executor.register_quantize_delegate(name, delegate)
 
     # find all quantable operations.
     interested_op = [
@@ -144,7 +149,8 @@ def graphwise_error_analyse(
                 )
 
             recorders[operation.name] = MeasureRecorder(
-                measurement=method, flatten_start_dim=flatten_start_dim
+                measurement=method, flatten_start_dim=flatten_start_dim,
+                reduce=reduce_method,
             )
             hooks[operation.name] = OutputRecorder(operation=operation, fetchs=fetchs)
             caches[operation.name] = []
@@ -452,10 +458,12 @@ def graphwise_error_analyse_v2(
     interested_op: List[Operation] = None,
     collate_fn: Callable = None,
     method: str = "snr",
+    reduce_method: str = "mean",
     steps: int = 8,
     verbose: bool = True,
     fetchs: int = 4096,
     flatten_start_dim: int = 1,
+    delegates = None,
 ) -> Dict[str, float]:
     """Measure the difference from a quantized graph to its dequantized graph.
 
@@ -502,7 +510,9 @@ def graphwise_error_analyse_v2(
         Result is like: {'operation name 1': 0.933, 'operation name 2': 0.926}
     """
     executor = TorchExecutor(graph=graph, device=running_device)
-
+    if delegates:
+        for name, delegate in delegates.items():
+            executor.register_quantize_delegate(name, delegate)
     # find all quantable operations.None
     interested_op = (
         [
@@ -535,7 +545,8 @@ def graphwise_error_analyse_v2(
                 )
 
             recorders[operation.name] = MeasureRecorder(
-                measurement=method, flatten_start_dim=flatten_start_dim
+                measurement=method, flatten_start_dim=flatten_start_dim,
+                reduce=reduce_method,
             )
             hooks[operation.name] = OutputRecorder(operation=operation, fetchs=fetchs)
             caches[operation.name] = []
